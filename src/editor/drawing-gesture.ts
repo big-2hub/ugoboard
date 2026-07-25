@@ -12,7 +12,7 @@ export function startDrawingGesture(
   color: string,
   width: number,
 ): Omit<EditorDrawing, 'id'> | undefined {
-  if (mode === 'select') return undefined
+  if (mode === 'select' || mode === 'delete') return undefined
   return {
     type: mode,
     points: [input.point, input.point],

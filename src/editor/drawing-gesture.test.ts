@@ -32,4 +32,13 @@ describe('スマホのタッチ描画入力', () => {
     )
     expect(drawing?.type).toBe('line')
   })
+
+  it('削除モードでは新規描画を開始しない', () => {
+    expect(startDrawingGesture(
+      { inputType: 'touch', point: { x: 0.4, y: 0.4 } },
+      'delete',
+      '#ef4444',
+      4,
+    )).toBeUndefined()
+  })
 })

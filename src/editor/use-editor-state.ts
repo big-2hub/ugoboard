@@ -5,6 +5,8 @@ import { moveIconWithFollowers, type CourtFrame, type EditorIcon } from './edito
 import type { EditorDrawing, EditorMode, EditorSnapshot } from './editor-types'
 import { createId } from '../utils/create-id'
 import { takePreviousSnapshot } from './editor-history'
+import { deleteDrawingFromSnapshot, deleteIconFromSnapshot } from './editor-delete'
+import { canPlaceIcon } from './icon-placement-limits'
 
 const iconLabels: Record<IconKind, string> = {
   offense: 'O',
@@ -29,7 +31,7 @@ export function useEditorState() {
 
   const addIcon = useCallback((kind: IconKind, visibleYMax: number) => {
     remember()
-    setIcons((items) => [
+    setIcons((items) => canPlaceIcon(items, kind) ? [
       ...items,
       {
         id: createId(kind),
@@ -37,8 +39,21 @@ export function useEditorState() {
         label: iconLabels[kind],
         position: { x: 0.5, y: visibleYMax / 2 },
       },
-    ])
+    ] : items)
     setMode('select')
+  }, [remember])
+
+  const addIconAt = useCallback((kind: IconKind, position: Point) => {
+    remember()
+    setIcons((items) => canPlaceIcon(items, kind) ? [
+      ...items,
+      {
+        id: createId(kind),
+        kind,
+        label: iconLabels[kind],
+        position,
+      },
+    ] : items)
   }, [remember])
 
   const moveIcon = useCallback((id: string, position: Point, frame: CourtFrame) => {
@@ -56,6 +71,19 @@ export function useEditorState() {
         : icon))
     setSelectedIconId(undefined)
   }, [remember, selectedIconId])
+
+  const deleteIcon = useCallback((iconId: string) => {
+    remember()
+    const next = deleteIconFromSnapshot({ icons, drawings }, iconId)
+    setIcons(next.icons)
+    setSelectedIconId(undefined)
+  }, [drawings, icons, remember])
+
+  const deleteDrawing = useCallback((drawingId: string) => {
+    remember()
+    const next = deleteDrawingFromSnapshot({ icons, drawings }, drawingId)
+    setDrawings(next.drawings)
+  }, [drawings, icons, remember])
 
   const addDrawing = useCallback((drawing: Omit<EditorDrawing, 'id'>) => {
     remember()
@@ -98,8 +126,11 @@ export function useEditorState() {
     setColor,
     setLineWidth,
     addIcon,
+    addIconAt,
     moveIcon,
     deleteSelected,
+    deleteIcon,
+    deleteDrawing,
     addDrawing,
     undo,
     clearDrawings,

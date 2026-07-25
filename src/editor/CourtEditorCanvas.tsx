@@ -21,6 +21,7 @@ import {
   updateDrawingGesture,
   type UnifiedPointerInput,
 } from './drawing-gesture'
+import { groupIconsByRenderOrder } from './icon-layer-order'
 
 type Props = {
   config: CourtConfig
@@ -30,32 +31,40 @@ type Props = {
   drawings: EditorDrawing[]
   selectedIconId?: string
   mode: EditorMode
+  placementKind?: IconKind
   color: string
   lineWidth: number
   onSelectIcon: (id?: string) => void
+  onPlaceIcon: (kind: IconKind, position: Point) => void
   onMoveIcon: (id: string, position: Point, frame: CourtFrame) => void
   onAddDrawing: (drawing: Omit<EditorDrawing, 'id'>) => void
+  onDeleteIcon: (id: string) => void
+  onDeleteDrawing: (id: string) => void
 }
 
 const padding = 6
 const isVisible = (line: CourtLine, view: CourtView) =>
   view === 'full' || (line.id !== 'center-circle' && !line.id.startsWith('bottom-'))
 
-function DrawingShape({ drawing, frame, opacity = 1 }: { drawing: Omit<EditorDrawing, 'id'>; frame: CourtFrame; opacity?: number }) {
+function DrawingShape({ drawing, frame, opacity = 1, onDelete }: { drawing: Omit<EditorDrawing, 'id'>; frame: CourtFrame; opacity?: number; onDelete?: () => void }) {
   const screenPoints = drawing.points.map((point) => normalizedToScreen(point, frame))
   const points = screenPoints.flatMap((point) => [point.x, point.y])
+  const interaction = onDelete
+    ? { onClick: onDelete, onTap: onDelete, hitStrokeWidth: Math.max(28, drawing.width + 20) }
+    : { listening: false }
   if (drawing.type === 'freehand') {
-    return <Line points={points} stroke={drawing.color} strokeWidth={drawing.width} opacity={opacity} lineCap="round" lineJoin="round" tension={0.25} />
+    return <Line {...interaction} points={points} stroke={drawing.color} strokeWidth={drawing.width} opacity={opacity} lineCap="round" lineJoin="round" tension={0.25} />
   }
   if (drawing.type === 'line') {
-    return <Line points={points} stroke={drawing.color} strokeWidth={drawing.width} opacity={opacity} lineCap="round" />
+    return <Line {...interaction} points={points} stroke={drawing.color} strokeWidth={drawing.width} opacity={opacity} lineCap="round" />
   }
   if (drawing.type === 'dribble' && screenPoints.length >= 2) {
     const zigzag = createZigzagPoints(screenPoints[0], screenPoints.at(-1)!, 12, Math.max(5, drawing.width * 1.5))
-    return <Arrow points={zigzag} stroke={drawing.color} fill={drawing.color} strokeWidth={drawing.width} opacity={opacity} pointerLength={9} pointerWidth={8} lineCap="round" lineJoin="round" />
+    return <Arrow {...interaction} points={zigzag} stroke={drawing.color} fill={drawing.color} strokeWidth={drawing.width} opacity={opacity} pointerLength={9} pointerWidth={8} lineCap="round" lineJoin="round" />
   }
   return (
     <Arrow
+      {...interaction}
       points={points}
       stroke={drawing.color}
       fill={drawing.color}
@@ -91,8 +100,8 @@ function IconShape({ kind, label }: { kind: IconKind; label?: string }) {
 
 export function CourtEditorCanvas(props: Props) {
   const {
-    config, view, orientation, icons, drawings, selectedIconId, mode, color, lineWidth,
-    onSelectIcon, onMoveIcon, onAddDrawing,
+    config, view, orientation, icons, drawings, selectedIconId, mode, placementKind, color, lineWidth,
+    onSelectIcon, onPlaceIcon, onMoveIcon, onAddDrawing, onDeleteIcon, onDeleteDrawing,
   } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 320, height: 480 })
@@ -121,6 +130,8 @@ export function CourtEditorCanvas(props: Props) {
   const groupProps = orientation === 'landscape'
     ? { x: frame.x, y: frame.y + frame.naturalWidth, rotation: -90 }
     : { x: frame.x, y: frame.y, rotation: 0 }
+  const iconGroups = useMemo(() => groupIconsByRenderOrder(icons), [icons])
+  const selectedIcon = icons.find((icon) => icon.id === selectedIconId)
 
   const readPointer = (event: KonvaEventObject<PointerEvent | TouchEvent>): UnifiedPointerInput | null => {
     const screen = event.target.getStage()?.getPointerPosition()
@@ -133,8 +144,16 @@ export function CourtEditorCanvas(props: Props) {
   }
 
   const handlePointerDown = (event: KonvaEventObject<PointerEvent | TouchEvent>) => {
+    if (mode === 'delete') return
     if (mode === 'select') {
-      if (event.target === event.target.getStage()) onSelectIcon(undefined)
+      if (event.target === event.target.getStage()) {
+        const input = readPointer(event)
+        if (placementKind && input) {
+          onPlaceIcon(placementKind, clampNormalizedPosition(input.point, frame))
+        } else {
+          onSelectIcon(undefined)
+        }
+      }
       return
     }
     const input = readPointer(event)
@@ -162,6 +181,28 @@ export function CourtEditorCanvas(props: Props) {
     if (completedDraft && isCompletedDrawing(completedDraft)) onAddDrawing(completedDraft)
     draftRef.current = undefined
     setDraft(undefined)
+  }
+
+  const renderIcon = (icon: EditorIcon) => {
+    const basePosition = normalizedToScreen(icon.position, frame)
+    const heldOffset = icon.kind === 'ball' && icon.holderId ? { x: 14, y: -14 } : { x: 0, y: 0 }
+    return (
+      <Group
+        key={icon.id}
+        x={basePosition.x + heldOffset.x}
+        y={basePosition.y + heldOffset.y}
+        draggable={mode === 'select' && !placementKind}
+        onClick={() => mode === 'delete' ? onDeleteIcon(icon.id) : onSelectIcon(icon.id)}
+        onTap={() => mode === 'delete' ? onDeleteIcon(icon.id) : onSelectIcon(icon.id)}
+        onDragStart={() => onSelectIcon(icon.id)}
+        onDragEnd={(event) => {
+          const normalized = screenToNormalized({ x: event.target.x(), y: event.target.y() }, frame)
+          if (normalized) onMoveIcon(icon.id, clampNormalizedPosition(normalized, frame), frame)
+        }}
+      >
+        <IconShape kind={icon.kind} label={icon.label} />
+      </Group>
+    )
   }
 
   return (
@@ -205,35 +246,20 @@ export function CourtEditorCanvas(props: Props) {
           </Group>
         </Layer>
 
-        <Layer listening={false}>
-          {drawings.map((drawing) => <DrawingShape key={drawing.id} drawing={drawing} frame={frame} />)}
+        <Layer listening={mode === 'delete'}>
+          {drawings.map((drawing) => <DrawingShape key={drawing.id} drawing={drawing} frame={frame} onDelete={mode === 'delete' ? () => onDeleteDrawing(drawing.id) : undefined} />)}
           {draft && <DrawingShape drawing={draft} frame={frame} opacity={0.75} />}
         </Layer>
 
-        <Layer>
-          {icons.map((icon) => {
-            const basePosition = normalizedToScreen(icon.position, frame)
-            const heldOffset = icon.kind === 'ball' && icon.holderId ? { x: 14, y: -14 } : { x: 0, y: 0 }
-            const selected = selectedIconId === icon.id
-            return (
-              <Group
-                key={icon.id}
-                x={basePosition.x + heldOffset.x}
-                y={basePosition.y + heldOffset.y}
-                draggable={mode === 'select'}
-                onClick={() => onSelectIcon(icon.id)}
-                onTap={() => onSelectIcon(icon.id)}
-                onDragStart={() => onSelectIcon(icon.id)}
-                onDragEnd={(event) => {
-                  const normalized = screenToNormalized({ x: event.target.x(), y: event.target.y() }, frame)
-                  if (normalized) onMoveIcon(icon.id, clampNormalizedPosition(normalized, frame), frame)
-                }}
-              >
-                {selected && <Circle radius={27} stroke="#ffde59" strokeWidth={3} dash={[5, 4]} />}
-                <IconShape kind={icon.kind} label={icon.label} />
-              </Group>
-            )
-          })}
+        <Layer>{iconGroups.equipment.map(renderIcon)}</Layer>
+        <Layer>{iconGroups.players.map(renderIcon)}</Layer>
+        <Layer>{iconGroups.balls.map(renderIcon)}</Layer>
+        <Layer listening={false}>
+          {selectedIcon && (() => {
+            const position = normalizedToScreen(selectedIcon.position, frame)
+            const offset = selectedIcon.kind === 'ball' && selectedIcon.holderId ? { x: 14, y: -14 } : { x: 0, y: 0 }
+            return <Circle x={position.x + offset.x} y={position.y + offset.y} radius={27} stroke="#ffde59" strokeWidth={3} dash={[5, 4]} />
+          })()}
         </Layer>
       </Stage>
       <span className="orientation-indicator" aria-hidden="true">{orientation === 'landscape' ? '↻ 横持ち' : '↕ 縦持ち'}</span>
