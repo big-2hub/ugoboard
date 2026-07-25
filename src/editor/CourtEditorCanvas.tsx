@@ -22,6 +22,7 @@ import {
   type UnifiedPointerInput,
 } from './drawing-gesture'
 import { groupIconsByRenderOrder } from './icon-layer-order'
+import { canDragIcon } from './editor-tool-mode'
 
 type Props = {
   config: CourtConfig
@@ -191,7 +192,7 @@ export function CourtEditorCanvas(props: Props) {
         key={icon.id}
         x={basePosition.x + heldOffset.x}
         y={basePosition.y + heldOffset.y}
-        draggable={mode === 'select' && !placementKind}
+        draggable={canDragIcon(mode, placementKind)}
         onClick={() => mode === 'delete' ? onDeleteIcon(icon.id) : onSelectIcon(icon.id)}
         onTap={() => mode === 'delete' ? onDeleteIcon(icon.id) : onSelectIcon(icon.id)}
         onDragStart={() => onSelectIcon(icon.id)}

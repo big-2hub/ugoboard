@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { miniBasketballCourt, type Point } from '../court/court-config'
 import type { DrawingType, IconKind } from '../db/database'
 import { CourtEditorCanvas } from '../editor/CourtEditorCanvas'
-import { chooseDrawing, choosePlacement } from '../editor/editor-tool-mode'
+import { chooseDrawing, choosePlacement, closeDrawingPalette } from '../editor/editor-tool-mode'
 import { drawingModes, useEditorState } from '../editor/use-editor-state'
 import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacementLimitAfterAdd } from '../editor/icon-placement-limits'
 
@@ -92,6 +92,16 @@ export function EditorPage() {
     editor.setMode(editor.mode === 'delete' ? 'select' : 'delete')
   }
 
+  const closeDetailPalette = () => {
+    if (openPalette === 'drawing') {
+      const nextMode = closeDrawingPalette()
+      setPlacementKind(nextMode.placementKind)
+      editor.setMode(nextMode.editorMode)
+      editor.setSelectedIconId(undefined)
+    }
+    setOpenPalette(undefined)
+  }
+
   useEffect(() => {
     if (!toast) return
     const timer = window.setTimeout(() => setToast(undefined), 2400)
@@ -133,7 +143,7 @@ export function EditorPage() {
         <aside className={`detail-palette ${openPalette}-palette`} aria-label={`${openPalette === 'placement' ? '配置' : openPalette === 'drawing' ? '描画' : 'その他'}パレット`}>
           <div className="palette-heading">
             <strong>{openPalette === 'placement' ? '配置するもの' : openPalette === 'drawing' ? '描画設定' : 'メニュー'}</strong>
-            <button type="button" onClick={() => setOpenPalette(undefined)} aria-label="詳細パレットを閉じる">閉じる</button>
+            <button type="button" onClick={closeDetailPalette} aria-label={openPalette === 'drawing' ? '描画を終了してパレットを閉じる' : '詳細パレットを閉じる'}>閉じる</button>
           </div>
 
           {openPalette === 'placement' && (

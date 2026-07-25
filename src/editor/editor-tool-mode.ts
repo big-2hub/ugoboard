@@ -14,3 +14,11 @@ export function choosePlacement(kind: IconKind): EditorToolMode {
 export function chooseDrawing(editorMode: DrawingType): EditorToolMode {
   return { editorMode, placementKind: undefined }
 }
+
+export function closeDrawingPalette(): EditorToolMode {
+  return { editorMode: 'select', placementKind: undefined }
+}
+
+export function canDragIcon(editorMode: EditorMode, placementKind?: IconKind) {
+  return editorMode === 'select' && placementKind === undefined
+}
