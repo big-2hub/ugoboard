@@ -14,6 +14,7 @@ import { drawingModes, useEditorState } from '../editor/use-editor-state'
 import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacementLimitAfterAdd } from '../editor/icon-placement-limits'
 import { decideBallPlacement, shouldEndPlacementAfterAdd } from '../editor/icon-placement'
 import { useStepPlayback } from '../editor/use-step-playback'
+import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../editor/step-playback'
 
 type OpenPalette = 'placement' | 'drawing' | 'menu'
 
@@ -258,6 +259,52 @@ export function EditorPage() {
           onDeleteIcon={editor.deleteIcon}
           onDeleteDrawing={editor.deleteDrawing}
         />
+        {playback.isPlaying && (
+          <section className="playback-controls" aria-label="再生コントロール">
+            <span className="playback-position" aria-live="polite">
+              {playback.waitingForLoop
+                ? '次の周回を準備中'
+                : `${playback.segmentIndex + 1} → ${playback.segmentIndex + 2}`}
+            </span>
+            <button
+              type="button"
+              onClick={playback.seekBack}
+              disabled={playback.segmentIndex === 0 && playback.progress === 0}
+              aria-label="1ステップ戻す"
+            >
+              ◀
+            </button>
+            <button type="button" onClick={playback.togglePause} aria-label={playback.isPaused ? '再生を再開' : '一時停止'}>
+              {playback.isPaused ? '▶ 再開' : 'Ⅱ 一時停止'}
+            </button>
+            <button
+              type="button"
+              onClick={playback.seekForward}
+              disabled={playback.segmentIndex === editor.steps.length - 2 && playback.progress >= 1}
+              aria-label="1ステップ進める"
+            >
+              ▶
+            </button>
+            <label>
+              <span>速度</span>
+              <select
+                value={playback.speed}
+                onChange={(event) => playback.setSpeed(Number(event.target.value) as PlaybackSpeed)}
+                aria-label="再生速度"
+              >
+                {PLAYBACK_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed}倍</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              className={playback.loop ? 'active' : ''}
+              aria-pressed={playback.loop}
+              onClick={playback.toggleLoop}
+            >
+              ↻ ループ
+            </button>
+          </section>
+        )}
       </section>
 
       {openPalette && (

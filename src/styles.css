@@ -127,6 +127,7 @@ h2 { margin-bottom: 5px; font-size: 1.05rem; }
   min-height: 56px;
   padding: 5px;
   overflow-x: auto;
+  scrollbar-width: none;
   overscroll-behavior-x: contain;
   border: 1px solid #ffffff14;
   border-radius: 14px;
@@ -165,6 +166,43 @@ h2 { margin-bottom: 5px; font-size: 1.05rem; }
 .board-card { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid #ffffff1f; border-radius: 18px; background: #04160e80; box-shadow: 0 18px 60px #0000003d; }
 .court-host { width: 100%; height: 100%; }
 .editor-board { position: relative; }
+.playback-controls {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid #ffffff24;
+  border-radius: 14px;
+  background: #061a12e8;
+  box-shadow: 0 10px 30px #0008;
+  backdrop-filter: blur(12px);
+}
+.playback-controls::-webkit-scrollbar { display: none; }
+.playback-controls button,
+.playback-controls select {
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid #ffffff24;
+  border-radius: 10px;
+  color: #f8f5ed;
+  background: #ffffff0d;
+  font-size: .72rem;
+  font-weight: 850;
+  touch-action: manipulation;
+}
+.playback-controls button:disabled { cursor: default; opacity: .35; }
+.playback-controls button.active { color: #173d2b; border-color: #f1b66f; background: #f1b66f; }
+.playback-controls label { display: flex; align-items: center; gap: 4px; color: #bcd0c2; font-size: .62rem; font-weight: 800; white-space: nowrap; }
+.playback-controls select { min-width: 64px; padding: 0 5px; }
+.playback-position { min-width: 58px; color: #f1b66f; font-size: .62rem; font-weight: 850; text-align: center; white-space: nowrap; }
 .interactive-court, .interactive-court canvas { touch-action: none; overscroll-behavior: none; user-select: none; }
 .orientation-indicator { position: absolute; right: 7px; bottom: 7px; padding: 4px 7px; border-radius: 7px; color: #d2dfd6; background: #0a251bc9; font-size: .62rem; font-weight: 800; pointer-events: none; }
 .confirm-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: #020b07b8; backdrop-filter: blur(5px); }

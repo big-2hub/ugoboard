@@ -3,6 +3,9 @@ import type { EditorIcon } from './editor-geometry'
 import type { EditorStep } from './editor-steps'
 
 export const STEP_PLAYBACK_DURATION_MS = 1000
+export const LOOP_PLAYBACK_DELAY_MS = 500
+export const PLAYBACK_SPEEDS = [0.5, 1, 1.5, 2] as const
+export type PlaybackSpeed = typeof PLAYBACK_SPEEDS[number]
 
 export function interpolatePoint(from: Point, to: Point, progress: number): Point {
   const t = Math.max(0, Math.min(1, progress))
@@ -98,4 +101,106 @@ export function getPlaybackFrame(
 
 export function canEditDuringPlayback(isPlaying: boolean) {
   return !isPlaying
+}
+
+export type PlaybackRuntimeState = {
+  active: boolean
+  paused: boolean
+  segmentIndex: number
+  progress: number
+  speed: PlaybackSpeed
+  loop: boolean
+  loopDelayRemainingMs: number
+}
+
+export function createPlaybackRuntimeState(
+  speed: PlaybackSpeed = 1,
+  loop = false,
+): PlaybackRuntimeState {
+  return {
+    active: true,
+    paused: false,
+    segmentIndex: 0,
+    progress: 0,
+    speed,
+    loop,
+    loopDelayRemainingMs: 0,
+  }
+}
+
+export function advancePlayback(
+  state: PlaybackRuntimeState,
+  deltaMs: number,
+  stepCount: number,
+): PlaybackRuntimeState {
+  if (!state.active || state.paused || stepCount < 2 || deltaMs <= 0) return state
+
+  let remainingMs = deltaMs
+  let next = { ...state }
+
+  if (next.loopDelayRemainingMs > 0) {
+    if (remainingMs < next.loopDelayRemainingMs) {
+      return { ...next, loopDelayRemainingMs: next.loopDelayRemainingMs - remainingMs }
+    }
+    remainingMs -= next.loopDelayRemainingMs
+    next = { ...next, segmentIndex: 0, progress: 0, loopDelayRemainingMs: 0 }
+  }
+
+  const segmentDuration = STEP_PLAYBACK_DURATION_MS / next.speed
+  let progress = next.progress + remainingMs / segmentDuration
+  let segmentIndex = next.segmentIndex
+
+  while (progress >= 1) {
+    const overflow = progress - 1
+    if (segmentIndex < stepCount - 2) {
+      segmentIndex += 1
+      progress = overflow
+      continue
+    }
+    if (!next.loop) {
+      return { ...next, active: false, segmentIndex, progress: 1, loopDelayRemainingMs: 0 }
+    }
+    return {
+      ...next,
+      segmentIndex,
+      progress: 1,
+      loopDelayRemainingMs: LOOP_PLAYBACK_DELAY_MS,
+    }
+  }
+
+  return { ...next, segmentIndex, progress }
+}
+
+export function seekPlaybackStep(
+  state: PlaybackRuntimeState,
+  direction: -1 | 1,
+  stepCount: number,
+): PlaybackRuntimeState {
+  if (!state.active || stepCount < 2) return state
+  const currentStepIndex = state.loopDelayRemainingMs > 0 || state.progress >= 1
+    ? state.segmentIndex + 1
+    : state.segmentIndex
+  const targetStepIndex = Math.max(0, Math.min(stepCount - 1, currentStepIndex + direction))
+
+  if (targetStepIndex === stepCount - 1) {
+    return {
+      ...state,
+      segmentIndex: stepCount - 2,
+      progress: 1,
+      loopDelayRemainingMs: state.loop ? LOOP_PLAYBACK_DELAY_MS : 0,
+    }
+  }
+  return { ...state, segmentIndex: targetStepIndex, progress: 0, loopDelayRemainingMs: 0 }
+}
+
+export function getRuntimePlaybackIcons(
+  steps: EditorStep[],
+  state: PlaybackRuntimeState,
+): EditorIcon[] | undefined {
+  if (!state.active || steps.length < 2) return undefined
+  return interpolateStepIcons(
+    steps[state.segmentIndex].icons,
+    steps[state.segmentIndex + 1].icons,
+    state.progress,
+  )
 }

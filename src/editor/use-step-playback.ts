@@ -1,58 +1,93 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { EditorIcon } from './editor-geometry'
 import type { EditorStep } from './editor-steps'
-import { getPlaybackFrame } from './step-playback'
+import {
+  advancePlayback,
+  createPlaybackRuntimeState,
+  getRuntimePlaybackIcons,
+  seekPlaybackStep,
+  type PlaybackRuntimeState,
+  type PlaybackSpeed,
+} from './step-playback'
+
+const idlePlaybackState: PlaybackRuntimeState = {
+  ...createPlaybackRuntimeState(),
+  active: false,
+}
 
 export function useStepPlayback(steps: EditorStep[], onFinish: () => void) {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [icons, setIcons] = useState<EditorIcon[]>()
+  const [runtime, setRuntime] = useState(idlePlaybackState)
   const frameId = useRef<number | undefined>(undefined)
-  const startedAt = useRef<number | undefined>(undefined)
   const finishRef = useRef(onFinish)
+  const wasActive = useRef(false)
   finishRef.current = onFinish
 
-  const cancelFrame = useCallback(() => {
-    if (frameId.current !== undefined) cancelAnimationFrame(frameId.current)
-    frameId.current = undefined
-    startedAt.current = undefined
-  }, [])
+  useEffect(() => {
+    if (wasActive.current && !runtime.active) finishRef.current()
+    wasActive.current = runtime.active
+  }, [runtime.active])
 
-  const finish = useCallback(() => {
-    cancelFrame()
-    setIsPlaying(false)
-    setIcons(undefined)
-    finishRef.current()
-  }, [cancelFrame])
+  useEffect(() => {
+    if (!runtime.active || runtime.paused) return
+    let previousTime = performance.now()
 
-  const tick = useCallback((timestamp: number) => {
-    if (startedAt.current === undefined) startedAt.current = timestamp
-    const frame = getPlaybackFrame(steps, timestamp - startedAt.current)
-    if (!frame) {
-      finish()
-      return
+    const tick = (timestamp: number) => {
+      const deltaMs = timestamp - previousTime
+      previousTime = timestamp
+      setRuntime((current) => advancePlayback(current, deltaMs, steps.length))
+      frameId.current = requestAnimationFrame(tick)
     }
-    setIcons(frame.icons)
-    if (frame.finished) {
-      finish()
-      return
-    }
+
     frameId.current = requestAnimationFrame(tick)
-  }, [finish, steps])
+    return () => {
+      if (frameId.current !== undefined) cancelAnimationFrame(frameId.current)
+      frameId.current = undefined
+    }
+  }, [runtime.active, runtime.paused, steps.length])
 
   const start = useCallback(() => {
     if (steps.length < 2) return
-    cancelFrame()
-    setIcons(steps[0].icons)
-    setIsPlaying(true)
-    frameId.current = requestAnimationFrame(tick)
-  }, [cancelFrame, steps, tick])
+    setRuntime((current) => createPlaybackRuntimeState(current.speed, current.loop))
+  }, [steps.length])
 
   const stop = useCallback(() => {
-    if (!isPlaying) return
-    finish()
-  }, [finish, isPlaying])
+    setRuntime((current) => current.active ? { ...current, active: false, paused: false } : current)
+  }, [])
 
-  useEffect(() => cancelFrame, [cancelFrame])
+  const togglePause = useCallback(() => {
+    setRuntime((current) => current.active ? { ...current, paused: !current.paused } : current)
+  }, [])
 
-  return { isPlaying, icons, start, stop }
+  const seek = useCallback((direction: -1 | 1) => {
+    setRuntime((current) => seekPlaybackStep(current, direction, steps.length))
+  }, [steps.length])
+
+  const setSpeed = useCallback((speed: PlaybackSpeed) => {
+    setRuntime((current) => ({ ...current, speed }))
+  }, [])
+
+  const toggleLoop = useCallback(() => {
+    setRuntime((current) => ({
+      ...current,
+      loop: !current.loop,
+      loopDelayRemainingMs: current.loop ? 0 : current.loopDelayRemainingMs,
+    }))
+  }, [])
+
+  return {
+    isPlaying: runtime.active,
+    isPaused: runtime.paused,
+    icons: getRuntimePlaybackIcons(steps, runtime),
+    speed: runtime.speed,
+    loop: runtime.loop,
+    segmentIndex: runtime.segmentIndex,
+    progress: runtime.progress,
+    waitingForLoop: runtime.loopDelayRemainingMs > 0,
+    start,
+    stop,
+    togglePause,
+    seekBack: () => seek(-1),
+    seekForward: () => seek(1),
+    setSpeed,
+    toggleLoop,
+  }
 }

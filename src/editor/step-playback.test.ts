@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { EditorIcon } from './editor-geometry'
-import { canEditDuringPlayback, interpolatePoint, interpolateStepIcons } from './step-playback'
+import {
+  LOOP_PLAYBACK_DELAY_MS,
+  STEP_PLAYBACK_DURATION_MS,
+  advancePlayback,
+  canEditDuringPlayback,
+  createPlaybackRuntimeState,
+  interpolatePoint,
+  interpolateStepIcons,
+  seekPlaybackStep,
+} from './step-playback'
 
 describe('ステップ間の直線補間', () => {
   it('t=0、0.5、1で開始・中間・終了座標を返す', () => {
@@ -51,5 +60,47 @@ describe('ステップ間の直線補間', () => {
   it('再生中は編集できず、終了後は編集できる', () => {
     expect(canEditDuringPlayback(true)).toBe(false)
     expect(canEditDuringPlayback(false)).toBe(true)
+  })
+  it('一時停止中は進まず、再開すると同じ続きから進む', () => {
+    const started = advancePlayback(createPlaybackRuntimeState(), 400, 3)
+    const paused = { ...started, paused: true }
+    expect(advancePlayback(paused, 500, 3)).toEqual(paused)
+
+    const resumed = advancePlayback({ ...paused, paused: false }, 100, 3)
+    expect(resumed.segmentIndex).toBe(0)
+    expect(resumed.progress).toBeCloseTo(0.5)
+  })
+
+  it('ステップ戻し・送りは対象ステップの開始配置へ移動する', () => {
+    const inSecondSegment = {
+      ...createPlaybackRuntimeState(),
+      segmentIndex: 1,
+      progress: 0.6,
+    }
+    expect(seekPlaybackStep(inSecondSegment, -1, 4))
+      .toEqual(expect.objectContaining({ segmentIndex: 0, progress: 0 }))
+    expect(seekPlaybackStep(inSecondSegment, 1, 4))
+      .toEqual(expect.objectContaining({ segmentIndex: 2, progress: 0 }))
+  })
+
+  it('速度倍率を区間所要時間へ反映する', () => {
+    const doubleSpeed = createPlaybackRuntimeState(2)
+    const reachedNextStep = advancePlayback(doubleSpeed, STEP_PLAYBACK_DURATION_MS / 2, 3)
+
+    expect(reachedNextStep.segmentIndex).toBe(1)
+    expect(reachedNextStep.progress).toBe(0)
+  })
+
+  it('ループ時は待ち時間後にステップ1へ戻り再生を続ける', () => {
+    const looping = createPlaybackRuntimeState(1, true)
+    const reachedEnd = advancePlayback(looping, STEP_PLAYBACK_DURATION_MS * 2, 3)
+    expect(reachedEnd.active).toBe(true)
+    expect(reachedEnd.progress).toBe(1)
+    expect(reachedEnd.loopDelayRemainingMs).toBe(LOOP_PLAYBACK_DELAY_MS)
+
+    const restarted = advancePlayback(reachedEnd, LOOP_PLAYBACK_DELAY_MS + 100, 3)
+    expect(restarted.segmentIndex).toBe(0)
+    expect(restarted.progress).toBeCloseTo(0.1)
+    expect(restarted.active).toBe(true)
   })
 })
