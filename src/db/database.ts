@@ -50,12 +50,18 @@ export type IconSnapshot = {
   label?: string
 }
 
+export type IconMotionControlPoints = {
+  iconId: string
+  points: Point[]
+}
+
 export type Step = StoredRecord & {
   playId: string
   order: number
   icons: IconSnapshot[]
-  ballHolderIconId?: string
+  holderId?: string
   note?: string
+  motionControlPoints?: IconMotionControlPoints[]
 }
 
 export type DrawingType = 'freehand' | 'line' | 'arrow' | 'pass' | 'dribble'

@@ -23,6 +23,21 @@ export type EditorIcon = {
   holderId?: string
 }
 
+export function getIconVisualFeedback(icon: EditorIcon, active: boolean) {
+  return {
+    position: { ...icon.position },
+    scale: active ? 1.2 : 1,
+  }
+}
+
+export function getBallDisplayRadius(ball: EditorIcon) {
+  return ball.kind === 'ball' && ball.holderId ? 9 : 13
+}
+
+export function getCourtRenderScale(frame: CourtFrame, referenceCourtWidth = 360) {
+  return clamp(frame.naturalWidth / referenceCourtWidth, 0.62, 1.15)
+}
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
@@ -189,4 +204,22 @@ export function createZigzagPoints(start: Point, end: Point, segments = 12, ampl
     )
   }
   return result
+}
+
+export function createDribbleArrowPoints(
+  start: Point,
+  end: Point,
+  segments = 12,
+  amplitude = 6,
+  straightLength = 12,
+): number[] {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length <= straightLength || length === 0) return [start.x, start.y, end.x, end.y]
+  const bodyEnd = {
+    x: end.x - dx / length * straightLength,
+    y: end.y - dy / length * straightLength,
+  }
+  return [...createZigzagPoints(start, bodyEnd, segments, amplitude), end.x, end.y]
 }

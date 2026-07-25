@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   createCourtFrame,
+  createDribbleArrowPoints,
+  getCourtRenderScale,
+  getIconVisualFeedback,
+  getBallDisplayRadius,
   moveIconWithFollowers,
   normalizedToScreen,
   screenToNormalized,
@@ -31,6 +35,12 @@ describe('コート正規化座標', () => {
     const point = screenToNormalized({ x: frame.x + frame.screenWidth, y: frame.y + frame.screenHeight }, frame)
     expect(point?.x).toBeCloseTo(1, 6)
     expect(point?.y).toBeCloseTo(0.5, 6)
+  })
+
+  it('フルコートではハーフコートよりアイコン・線の表示縮尺が小さくなる', () => {
+    const half = createCourtFrame(390, 500, 28 / 15, 'half', 'portrait')
+    const full = createCourtFrame(390, 500, 28 / 15, 'full', 'portrait')
+    expect(getCourtRenderScale(full)).toBeLessThan(getCourtRenderScale(half))
   })
 })
 
@@ -86,5 +96,38 @@ describe('ボール保持者への追従', () => {
       holderId: defense.id,
       position: defense.position,
     })
+  })
+})
+
+describe('ドラッグ中の視覚フィードバック', () => {
+  it('拡大表示しても保存対象の正規化座標を変えない', () => {
+    const icon: EditorIcon = { id: 'offense-1', kind: 'offense', position: { x: 0.42, y: 0.31 } }
+    const feedback = getIconVisualFeedback(icon, true)
+
+    expect(feedback.scale).toBe(1.2)
+    expect(feedback.position).toEqual(icon.position)
+    expect(icon.position).toEqual({ x: 0.42, y: 0.31 })
+  })
+
+  it('単独ボールの大きさは他アイコンの操作状態に影響されない', () => {
+    const ball: EditorIcon = { id: 'ball-1', kind: 'ball', position: { x: 0.2, y: 0.2 } }
+    const other: EditorIcon = { id: 'offense-1', kind: 'offense', position: { x: 0.7, y: 0.7 } }
+    const before = getBallDisplayRadius(ball)
+
+    getIconVisualFeedback(other, true)
+
+    expect(getBallDisplayRadius(ball)).toBe(before)
+    expect(before).toBe(13)
+    expect(getBallDisplayRadius({ ...ball, holderId: other.id })).toBe(9)
+  })
+})
+
+describe('ドリブル矢印', () => {
+  it('短い線でも最後の区間が元の進行方向を向く', () => {
+    const points = createDribbleArrowPoints({ x: 10, y: 20 }, { x: 24, y: 20 })
+    const beforeEnd = { x: points.at(-4)!, y: points.at(-3)! }
+    const end = { x: points.at(-2)!, y: points.at(-1)! }
+    expect(end.y - beforeEnd.y).toBe(0)
+    expect(end.x - beforeEnd.x).toBeGreaterThan(0)
   })
 })

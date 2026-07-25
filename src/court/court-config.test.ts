@@ -8,5 +8,9 @@ describe('miniBasketballCourt', () => {
     expect(miniBasketballCourt.circleRadiusMeters).toBe(1.8)
     expect(miniBasketballCourt.threePoint.enabled).toBe(false)
     expect(miniBasketballCourt.noChargeSemicircle.enabled).toBe(false)
+    expect(miniBasketballCourt.viewLabels).toEqual({
+      half: 'ハーフコート',
+      full: 'フルコート',
+    })
   })
 })

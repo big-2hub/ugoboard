@@ -22,3 +22,19 @@ export function closeDrawingPalette(): EditorToolMode {
 export function canDragIcon(editorMode: EditorMode, placementKind?: IconKind) {
   return editorMode === 'select' && placementKind === undefined
 }
+
+export function canInteractWithIcons(editorMode: EditorMode) {
+  return editorMode === 'select' || editorMode === 'delete'
+}
+
+export function finishPlacementFlow(): EditorToolMode & { openPlacementPalette: true } {
+  return {
+    editorMode: 'select',
+    placementKind: undefined,
+    openPlacementPalette: true,
+  }
+}
+
+export function resetTransientIconState() {
+  return undefined
+}

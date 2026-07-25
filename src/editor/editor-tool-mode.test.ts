@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { canDragIcon, chooseDrawing, choosePlacement, closeDrawingPalette } from './editor-tool-mode'
+import {
+  canDragIcon,
+  canInteractWithIcons,
+  chooseDrawing,
+  choosePlacement,
+  closeDrawingPalette,
+  finishPlacementFlow,
+  resetTransientIconState,
+} from './editor-tool-mode'
 
 describe('配置・描画モード切替', () => {
   it('配置対象を選ぶと選択モードのまま連続配置対象を保持する', () => {
@@ -33,5 +41,24 @@ describe('配置・描画モード切替', () => {
     expect(canDragIcon('arrow')).toBe(false)
     expect(canDragIcon('delete')).toBe(false)
     expect(canDragIcon('select', 'offense')).toBe(false)
+  })
+
+  it('描画モード中はアイコンがタッチに反応しない', () => {
+    expect(canInteractWithIcons('freehand')).toBe(false)
+    expect(canInteractWithIcons('dribble')).toBe(false)
+    expect(canInteractWithIcons('select')).toBe(true)
+    expect(canInteractWithIcons('delete')).toBe(true)
+  })
+
+  it('配置完了・自動終了後は配置パレットを開く', () => {
+    expect(finishPlacementFlow()).toEqual({
+      editorMode: 'select',
+      placementKind: undefined,
+      openPlacementPalette: true,
+    })
+  })
+
+  it('モード切替時は一時的な拡大対象を解除する', () => {
+    expect(resetTransientIconState()).toBeUndefined()
   })
 })

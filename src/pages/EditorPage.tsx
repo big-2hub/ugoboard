@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { miniBasketballCourt, type Point } from '../court/court-config'
 import type { DrawingType, IconKind } from '../db/database'
 import { CourtEditorCanvas } from '../editor/CourtEditorCanvas'
-import { chooseDrawing, choosePlacement, closeDrawingPalette } from '../editor/editor-tool-mode'
+import { chooseDrawing, choosePlacement, closeDrawingPalette, finishPlacementFlow } from '../editor/editor-tool-mode'
 import { drawingModes, useEditorState } from '../editor/use-editor-state'
 import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacementLimitAfterAdd } from '../editor/icon-placement-limits'
+import { decideBallPlacement, shouldEndPlacementAfterAdd } from '../editor/icon-placement'
 
 type OpenPalette = 'placement' | 'drawing' | 'menu'
 
@@ -41,16 +42,24 @@ export function EditorPage() {
   const [openPalette, setOpenPalette] = useState<OpenPalette>()
   const [placementKind, setPlacementKind] = useState<IconKind>()
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
+  const [showStepDeleteConfirmation, setShowStepDeleteConfirmation] = useState(false)
   const [toast, setToast] = useState<string>()
   const landscape = useLandscape()
   const editor = useEditorState()
   const drawingMode = editor.mode === 'select' || editor.mode === 'delete' ? undefined : editor.mode
   const placementLabel = iconTools.find((tool) => tool.kind === placementKind)?.label
 
+  const finishPlacement = () => {
+    const next = finishPlacementFlow()
+    setPlacementKind(next.placementKind)
+    editor.setMode(next.editorMode)
+    editor.setSelectedIconId(undefined)
+    setOpenPalette('placement')
+  }
+
   const openPlacement = () => {
     if (placementKind) {
-      setPlacementKind(undefined)
-      editor.setMode('select')
+      finishPlacement()
       return
     }
     editor.setMode('select')
@@ -70,18 +79,32 @@ export function EditorPage() {
     setToast(`${label}は${ICON_PLACEMENT_LIMITS[kind]}個まで配置できます`)
   }
 
-  const placeIcon = (kind: IconKind, position: Point) => {
+  const placeIcon = (kind: IconKind, position: Point, holderId?: string) => {
     if (!canPlaceIcon(editor.icons, kind)) {
       setPlacementKind(undefined)
       editor.setMode('select')
       showLimitToast(kind)
+      setOpenPalette('placement')
       return
     }
-    editor.addIconAt(kind, position)
+    if (kind === 'ball') {
+      const decision = decideBallPlacement(editor.icons, holderId)
+      if (!decision.allowed) {
+        setToast(decision.message)
+        finishPlacement()
+        return
+      }
+    }
+    editor.addIconAt(kind, position, holderId)
+    if (shouldEndPlacementAfterAdd(kind)) {
+      finishPlacement()
+      return
+    }
     if (reachesPlacementLimitAfterAdd(editor.icons, kind)) {
       setPlacementKind(undefined)
       editor.setMode('select')
       showLimitToast(kind)
+      setOpenPalette('placement')
     }
   }
 
@@ -97,6 +120,11 @@ export function EditorPage() {
       const nextMode = closeDrawingPalette()
       setPlacementKind(nextMode.placementKind)
       editor.setMode(nextMode.editorMode)
+      editor.setSelectedIconId(undefined)
+    }
+    if (openPalette === 'placement') {
+      setPlacementKind(undefined)
+      editor.setMode('select')
       editor.setSelectedIconId(undefined)
     }
     setOpenPalette(undefined)
@@ -118,7 +146,38 @@ export function EditorPage() {
         </div>
       </header>
 
-      <section className="board-card editor-board" aria-label={`${miniBasketballCourt.name} ${view === 'half' ? 'ハーフ' : 'フル'}表示`}>
+      <section className="step-bar" aria-label="ステップ管理">
+        <div className="step-summary" aria-live="polite">
+          <span>STEP</span>
+          <strong>{editor.currentStepNumber} / {editor.steps.length}</strong>
+        </div>
+        <div className="step-list" role="tablist" aria-label="ステップを切り替える">
+          {editor.steps.map((step) => (
+            <button
+              key={step.id}
+              type="button"
+              role="tab"
+              aria-selected={step.id === editor.currentStepId}
+              className={step.id === editor.currentStepId ? 'active' : ''}
+              onClick={() => editor.selectStep(step.id)}
+            >
+              {step.order}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="step-add" onClick={editor.addStep} aria-label="現在の配置を複製してステップを追加">＋ 追加</button>
+        <button
+          type="button"
+          className="step-delete"
+          disabled={editor.steps.length === 1}
+          onClick={() => setShowStepDeleteConfirmation(true)}
+          aria-label="現在のステップを削除"
+        >
+          削除
+        </button>
+      </section>
+
+      <section className="board-card editor-board" aria-label={`${miniBasketballCourt.name} ${miniBasketballCourt.viewLabels[view]}表示`}>
         <CourtEditorCanvas
           config={miniBasketballCourt}
           view={view}
@@ -212,8 +271,8 @@ export function EditorPage() {
           {openPalette === 'menu' && (
             <div className="menu-actions">
               <div className="view-toggle" role="group" aria-label="コート表示">
-                <button type="button" className={view === 'half' ? 'active' : ''} aria-pressed={view === 'half'} onClick={() => setView('half')}>ハーフ</button>
-                <button type="button" className={view === 'full' ? 'active' : ''} aria-pressed={view === 'full'} onClick={() => setView('full')}>フル</button>
+                <button type="button" className={view === 'half' ? 'active' : ''} aria-pressed={view === 'half'} onClick={() => setView('half')}>{miniBasketballCourt.viewLabels.half}</button>
+                <button type="button" className={view === 'full' ? 'active' : ''} aria-pressed={view === 'full'} onClick={() => setView('full')}>{miniBasketballCourt.viewLabels.full}</button>
               </div>
               <button type="button" disabled={editor.drawings.length === 0} onClick={() => { editor.clearDrawings(); setOpenPalette(undefined) }}>描画のみ全消去</button>
               <button type="button" className="danger-tool" disabled={editor.icons.length === 0 && editor.drawings.length === 0} onClick={() => setShowClearConfirmation(true)}>編集内容を全消去</button>
@@ -244,6 +303,22 @@ export function EditorPage() {
             <div>
               <button type="button" onClick={() => setShowClearConfirmation(false)}>キャンセル</button>
               <button type="button" className="confirm-delete" onClick={() => { editor.clearAll(); setShowClearConfirmation(false); setOpenPalette(undefined) }}>すべて消す</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showStepDeleteConfirmation && (
+        <div className="confirm-backdrop" role="presentation">
+          <section className="clear-confirm" role="dialog" aria-modal="true" aria-labelledby="step-delete-title">
+            <h2 id="step-delete-title">ステップ{editor.currentStepNumber}を削除しますか？</h2>
+            <p>このステップに記録した座標とボール保持状態が削除されます。この操作はUndoでは戻せません。</p>
+            <div>
+              <button type="button" onClick={() => setShowStepDeleteConfirmation(false)}>キャンセル</button>
+              <button type="button" className="confirm-delete" onClick={() => {
+                editor.removeCurrentStep()
+                setShowStepDeleteConfirmation(false)
+              }}>削除する</button>
             </div>
           </section>
         </div>

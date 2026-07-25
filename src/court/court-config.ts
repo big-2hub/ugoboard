@@ -8,6 +8,7 @@ export type CourtLine =
 export type CourtConfig = {
   id: string
   name: string
+  viewLabels: { half: string; full: string }
   dimensionsMeters: { length: number; width: number }
   aspectRatio: number
   lineWidthMeters: number
@@ -29,6 +30,7 @@ const keyWidth = 4.9 / width
 export const miniBasketballCourt: CourtConfig = {
   id: 'jba-u12-28x15',
   name: 'JBA U12 ミニバスコート',
+  viewLabels: { half: 'ハーフコート', full: 'フルコート' },
   dimensionsMeters: { length, width },
   aspectRatio: length / width,
   lineWidthMeters: 0.05,
