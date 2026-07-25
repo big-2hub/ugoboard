@@ -122,6 +122,7 @@ export function useEditorState() {
     setSteps((items) => duplicateStep(items, currentStepId, id))
     setCurrentStepId(id)
     setSelectedIconId(undefined)
+    setMode('select')
     setHistory([])
   }, [currentStepId])
 
@@ -129,6 +130,7 @@ export function useEditorState() {
     if (stepId === currentStepId) return
     setCurrentStepId(stepId)
     setSelectedIconId(undefined)
+    setMode('select')
     setHistory([])
   }, [currentStepId])
 
@@ -140,6 +142,7 @@ export function useEditorState() {
     setSteps(nextSteps)
     setCurrentStepId(nextSteps[nextIndex].id)
     setSelectedIconId(undefined)
+    setMode('select')
     setHistory([])
   }, [currentStepId, steps])
 

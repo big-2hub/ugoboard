@@ -6,6 +6,7 @@ import {
   choosePlacement,
   closeDrawingPalette,
   finishPlacementFlow,
+  resetForStepOperation,
   resetTransientIconState,
 } from './editor-tool-mode'
 
@@ -61,4 +62,17 @@ describe('配置・描画モード切替', () => {
   it('モード切替時は一時的な拡大対象を解除する', () => {
     expect(resetTransientIconState()).toBeUndefined()
   })
+  it.each(['add', 'delete', 'select'] as const)(
+    'ステップ%s後は描画・配置・パレットを解除し、すぐドラッグできる',
+    (operation) => {
+      const reset = resetForStepOperation(operation)
+
+      expect(reset).toEqual({
+        editorMode: 'select',
+        placementKind: undefined,
+        openPalette: undefined,
+      })
+      expect(canDragIcon(reset.editorMode, reset.placementKind)).toBe(true)
+    },
+  )
 })

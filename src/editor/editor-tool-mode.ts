@@ -7,6 +7,8 @@ export type EditorToolMode = {
   placementKind?: IconKind
 }
 
+export type StepOperation = 'add' | 'delete' | 'select'
+
 export function choosePlacement(kind: IconKind): EditorToolMode {
   return { editorMode: 'select', placementKind: kind }
 }
@@ -32,6 +34,14 @@ export function finishPlacementFlow(): EditorToolMode & { openPlacementPalette: 
     editorMode: 'select',
     placementKind: undefined,
     openPlacementPalette: true,
+  }
+}
+
+export function resetForStepOperation(_operation: StepOperation): EditorToolMode & { openPalette: undefined } {
+  return {
+    editorMode: 'select',
+    placementKind: undefined,
+    openPalette: undefined,
   }
 }
 

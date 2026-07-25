@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react'
 import { miniBasketballCourt, type Point } from '../court/court-config'
 import type { DrawingType, IconKind } from '../db/database'
 import { CourtEditorCanvas } from '../editor/CourtEditorCanvas'
-import { chooseDrawing, choosePlacement, closeDrawingPalette, finishPlacementFlow } from '../editor/editor-tool-mode'
+import {
+  chooseDrawing,
+  choosePlacement,
+  closeDrawingPalette,
+  finishPlacementFlow,
+  resetForStepOperation,
+  type StepOperation,
+} from '../editor/editor-tool-mode'
 import { drawingModes, useEditorState } from '../editor/use-editor-state'
 import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacementLimitAfterAdd } from '../editor/icon-placement-limits'
 import { decideBallPlacement, shouldEndPlacementAfterAdd } from '../editor/icon-placement'
@@ -48,6 +55,31 @@ export function EditorPage() {
   const editor = useEditorState()
   const drawingMode = editor.mode === 'select' || editor.mode === 'delete' ? undefined : editor.mode
   const placementLabel = iconTools.find((tool) => tool.kind === placementKind)?.label
+
+  const resetStepInteraction = (operation: StepOperation) => {
+    const reset = resetForStepOperation(operation)
+    setPlacementKind(reset.placementKind)
+    setOpenPalette(reset.openPalette)
+    editor.setSelectedIconId(undefined)
+    editor.setMode(reset.editorMode)
+  }
+
+  const addStep = () => {
+    resetStepInteraction('add')
+    editor.addStep()
+  }
+
+  const selectStep = (stepId: string) => {
+    if (stepId === editor.currentStepId) return
+    resetStepInteraction('select')
+    editor.selectStep(stepId)
+  }
+
+  const removeCurrentStep = () => {
+    resetStepInteraction('delete')
+    editor.removeCurrentStep()
+    setShowStepDeleteConfirmation(false)
+  }
 
   const finishPlacement = () => {
     const next = finishPlacementFlow()
@@ -159,13 +191,13 @@ export function EditorPage() {
               role="tab"
               aria-selected={step.id === editor.currentStepId}
               className={step.id === editor.currentStepId ? 'active' : ''}
-              onClick={() => editor.selectStep(step.id)}
+              onClick={() => selectStep(step.id)}
             >
               {step.order}
             </button>
           ))}
         </div>
-        <button type="button" className="step-add" onClick={editor.addStep} aria-label="現在の配置を複製してステップを追加">＋ 追加</button>
+        <button type="button" className="step-add" onClick={addStep} aria-label="現在の配置を複製してステップを追加">＋ 追加</button>
         <button
           type="button"
           className="step-delete"
@@ -315,10 +347,7 @@ export function EditorPage() {
             <p>このステップに記録した座標とボール保持状態が削除されます。この操作はUndoでは戻せません。</p>
             <div>
               <button type="button" onClick={() => setShowStepDeleteConfirmation(false)}>キャンセル</button>
-              <button type="button" className="confirm-delete" onClick={() => {
-                editor.removeCurrentStep()
-                setShowStepDeleteConfirmation(false)
-              }}>削除する</button>
+              <button type="button" className="confirm-delete" onClick={removeCurrentStep}>削除する</button>
             </div>
           </section>
         </div>
