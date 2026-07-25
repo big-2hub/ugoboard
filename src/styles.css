@@ -112,6 +112,8 @@ h2 { margin-bottom: 5px; font-size: 1.05rem; }
 }
 .step-list button.active { color: #173d2b; border-color: #f1b66f; background: #f1b66f; }
 .step-bar .step-add { min-width: 64px; }
+.step-bar .step-playback { min-width: 64px; color: #173d2b; border-color: #f1b66f; background: #f1b66f; }
+.step-bar .step-playback.active { color: #fff7e8; border-color: #ef665c; background: #9f302b; }
 .step-bar .step-delete { color: #ffb2a8; border-color: #ff776655; }
 .step-bar button:disabled { cursor: default; opacity: .35; }
 .view-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid #ffffff26; border-radius: 14px; background: #0003; }

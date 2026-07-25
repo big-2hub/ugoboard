@@ -13,6 +13,7 @@ import {
 import { drawingModes, useEditorState } from '../editor/use-editor-state'
 import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacementLimitAfterAdd } from '../editor/icon-placement-limits'
 import { decideBallPlacement, shouldEndPlacementAfterAdd } from '../editor/icon-placement'
+import { useStepPlayback } from '../editor/use-step-playback'
 
 type OpenPalette = 'placement' | 'drawing' | 'menu'
 
@@ -53,8 +54,13 @@ export function EditorPage() {
   const [toast, setToast] = useState<string>()
   const landscape = useLandscape()
   const editor = useEditorState()
+  const playback = useStepPlayback(editor.steps, () => {
+    const lastStep = editor.steps.at(-1)
+    if (lastStep) editor.selectStep(lastStep.id)
+  })
   const drawingMode = editor.mode === 'select' || editor.mode === 'delete' ? undefined : editor.mode
   const placementLabel = iconTools.find((tool) => tool.kind === placementKind)?.label
+  const displayedIcons = playback.icons ?? editor.icons
 
   const resetStepInteraction = (operation: StepOperation) => {
     const reset = resetForStepOperation(operation)
@@ -79,6 +85,19 @@ export function EditorPage() {
     resetStepInteraction('delete')
     editor.removeCurrentStep()
     setShowStepDeleteConfirmation(false)
+  }
+
+  const togglePlayback = () => {
+    if (playback.isPlaying) {
+      playback.stop()
+      return
+    }
+    resetStepInteraction('select')
+    setShowClearConfirmation(false)
+    setShowStepDeleteConfirmation(false)
+    const firstStep = editor.steps[0]
+    if (firstStep) editor.selectStep(firstStep.id)
+    playback.start()
   }
 
   const finishPlacement = () => {
@@ -189,6 +208,7 @@ export function EditorPage() {
               key={step.id}
               type="button"
               role="tab"
+              disabled={playback.isPlaying}
               aria-selected={step.id === editor.currentStepId}
               className={step.id === editor.currentStepId ? 'active' : ''}
               onClick={() => selectStep(step.id)}
@@ -197,11 +217,20 @@ export function EditorPage() {
             </button>
           ))}
         </div>
-        <button type="button" className="step-add" onClick={addStep} aria-label="現在の配置を複製してステップを追加">＋ 追加</button>
+        <button type="button" className="step-add" disabled={playback.isPlaying} onClick={addStep} aria-label="現在の配置を複製してステップを追加">＋ 追加</button>
+        <button
+          type="button"
+          className={`step-playback${playback.isPlaying ? ' active' : ''}`}
+          disabled={!playback.isPlaying && editor.steps.length < 2}
+          aria-pressed={playback.isPlaying}
+          onClick={togglePlayback}
+        >
+          {playback.isPlaying ? '■ 中断' : '▶ 再生'}
+        </button>
         <button
           type="button"
           className="step-delete"
-          disabled={editor.steps.length === 1}
+          disabled={editor.steps.length === 1 || playback.isPlaying}
           onClick={() => setShowStepDeleteConfirmation(true)}
           aria-label="現在のステップを削除"
         >
@@ -214,13 +243,14 @@ export function EditorPage() {
           config={miniBasketballCourt}
           view={view}
           orientation={landscape ? 'landscape' : 'portrait'}
-          icons={editor.icons}
+          icons={displayedIcons}
           drawings={editor.drawings}
-          selectedIconId={editor.selectedIconId}
+          selectedIconId={playback.isPlaying ? undefined : editor.selectedIconId}
           mode={editor.mode}
           placementKind={placementKind}
           color={editor.color}
           lineWidth={editor.lineWidth}
+          readOnly={playback.isPlaying}
           onSelectIcon={editor.setSelectedIconId}
           onPlaceIcon={placeIcon}
           onMoveIcon={editor.moveIcon}
@@ -314,15 +344,15 @@ export function EditorPage() {
       )}
 
       <nav className="editor-category-bar" aria-label="編集カテゴリ">
-        <button type="button" className={placementKind || openPalette === 'placement' ? 'active' : ''} aria-pressed={Boolean(placementKind || openPalette === 'placement')} onClick={openPlacement}>
+        <button type="button" disabled={playback.isPlaying} className={placementKind || openPalette === 'placement' ? 'active' : ''} aria-pressed={Boolean(placementKind || openPalette === 'placement')} onClick={openPlacement}>
           {placementKind ? `✓ ${placementLabel}完了` : '＋ 配置'}
         </button>
-        <button type="button" className={drawingMode || openPalette === 'drawing' ? 'active' : ''} aria-pressed={Boolean(drawingMode || openPalette === 'drawing')} onClick={openDrawing}>
+        <button type="button" disabled={playback.isPlaying} className={drawingMode || openPalette === 'drawing' ? 'active' : ''} aria-pressed={Boolean(drawingMode || openPalette === 'drawing')} onClick={openDrawing}>
           ✏ {drawingMode ? drawingLabels[drawingMode] : '描画'}
         </button>
-        <button type="button" className={editor.mode === 'delete' ? 'active delete-mode-button' : 'delete-mode-button'} aria-pressed={editor.mode === 'delete'} onClick={toggleDeleteMode} aria-label="アイコンや描画を連続削除">⌫ 削除</button>
-        <button type="button" disabled={!editor.canUndo} onClick={editor.undo} aria-label="直前の操作を取り消す">↶ Undo</button>
-        <button type="button" className={openPalette === 'menu' ? 'active' : ''} aria-pressed={openPalette === 'menu'} onClick={() => setOpenPalette(openPalette === 'menu' ? undefined : 'menu')}>… メニュー</button>
+        <button type="button" disabled={playback.isPlaying} className={editor.mode === 'delete' ? 'active delete-mode-button' : 'delete-mode-button'} aria-pressed={editor.mode === 'delete'} onClick={toggleDeleteMode} aria-label="アイコンや描画を連続削除">⌫ 削除</button>
+        <button type="button" disabled={playback.isPlaying || !editor.canUndo} onClick={editor.undo} aria-label="直前の操作を取り消す">↶ Undo</button>
+        <button type="button" disabled={playback.isPlaying} className={openPalette === 'menu' ? 'active' : ''} aria-pressed={openPalette === 'menu'} onClick={() => setOpenPalette(openPalette === 'menu' ? undefined : 'menu')}>… メニュー</button>
       </nav>
 
       {toast && <div className="editor-toast" role="status" aria-live="polite">{toast}</div>}

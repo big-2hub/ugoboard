@@ -40,6 +40,7 @@ type Props = {
   placementKind?: IconKind
   color: string
   lineWidth: number
+  readOnly?: boolean
   onSelectIcon: (id?: string) => void
   onPlaceIcon: (kind: IconKind, position: Point, holderId?: string) => void
   onMoveIcon: (id: string, position: Point, frame: CourtFrame) => void
@@ -110,7 +111,7 @@ function IconShape({ icon, renderScale }: { icon: EditorIcon; renderScale: numbe
 
 export function CourtEditorCanvas(props: Props) {
   const {
-    config, view, orientation, icons, drawings, selectedIconId, mode, placementKind, color, lineWidth,
+    config, view, orientation, icons, drawings, selectedIconId, mode, placementKind, color, lineWidth, readOnly = false,
     onSelectIcon, onPlaceIcon, onMoveIcon, onAddDrawing, onDeleteIcon, onDeleteDrawing,
   } = props
   const hostRef = useRef<HTMLDivElement>(null)
@@ -300,6 +301,7 @@ export function CourtEditorCanvas(props: Props) {
       <Stage
         width={size.width}
         height={size.height}
+        listening={!readOnly}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishDrawing}
