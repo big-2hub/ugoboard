@@ -15,6 +15,7 @@ import {
   duplicateStep,
   updateStepIcons,
 } from './editor-steps'
+import type { EditorStep } from './editor-steps'
 import { createPlacedIcon } from './icon-placement'
 
 const iconLabels: Record<IconKind, string> = {
@@ -146,6 +147,16 @@ export function useEditorState() {
     setHistory([])
   }, [currentStepId, steps])
 
+  const loadDocument = useCallback((nextSteps: EditorStep[], nextDrawings: EditorDrawing[]) => {
+    const safeSteps = nextSteps.length > 0 ? nextSteps : [createInitialStep(createId('step'))]
+    setSteps(safeSteps)
+    setCurrentStepId(safeSteps[0].id)
+    setDrawings(nextDrawings)
+    setSelectedIconId(undefined)
+    setMode('select')
+    setHistory([])
+  }, [])
+
   return {
     icons,
     steps,
@@ -174,6 +185,7 @@ export function useEditorState() {
     addStep,
     selectStep,
     removeCurrentStep,
+    loadDocument,
   }
 }
 

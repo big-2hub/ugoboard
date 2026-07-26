@@ -73,6 +73,14 @@ export function useStepPlayback(steps: EditorStep[], onFinish: () => void) {
     }))
   }, [])
 
+  const setLoop = useCallback((loop: boolean) => {
+    setRuntime((current) => ({
+      ...current,
+      loop,
+      loopDelayRemainingMs: loop ? current.loopDelayRemainingMs : 0,
+    }))
+  }, [])
+
   return {
     isPlaying: runtime.active,
     isPaused: runtime.paused,
@@ -89,5 +97,6 @@ export function useStepPlayback(steps: EditorStep[], onFinish: () => void) {
     seekForward: () => seek(1),
     setSpeed,
     toggleLoop,
+    setLoop,
   }
 }

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { miniBasketballCourt, type Point } from '../court/court-config'
 import type { DrawingType, IconKind } from '../db/database'
 import { CourtEditorCanvas } from '../editor/CourtEditorCanvas'
@@ -15,6 +16,15 @@ import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacement
 import { decideBallPlacement, shouldEndPlacementAfterAdd } from '../editor/icon-placement'
 import { useStepPlayback } from '../editor/use-step-playback'
 import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../editor/step-playback'
+import { loadPlayDocument, savePlayDocument } from '../db/play-repository'
+import type { PlayType } from '../db/database'
+import {
+  createEditorFingerprint,
+  hasUnsavedEditorChanges,
+  requiresLeaveConfirmation,
+  type SaveableEditorState,
+} from '../editor/editor-save-state'
+import { useUnsavedNavigation } from '../navigation/unsaved-navigation'
 
 type OpenPalette = 'placement' | 'drawing' | 'menu'
 
@@ -47,12 +57,27 @@ function useLandscape() {
 }
 
 export function EditorPage() {
+  const { playId } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { registerLeaveRequestHandler } = useUnsavedNavigation()
   const [view, setView] = useState<'half' | 'full'>('half')
   const [openPalette, setOpenPalette] = useState<OpenPalette>()
   const [placementKind, setPlacementKind] = useState<IconKind>()
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
   const [showStepDeleteConfirmation, setShowStepDeleteConfirmation] = useState(false)
   const [toast, setToast] = useState<string>()
+  const [savedPlayId, setSavedPlayId] = useState(playId)
+  const [playName, setPlayName] = useState('')
+  const [playType, setPlayType] = useState<PlayType>('play')
+  const [tagsText, setTagsText] = useState('')
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveState, setSaveState] = useState<'loading' | 'saving' | 'saved' | 'error'>(playId ? 'loading' : 'saved')
+  const [savedFingerprint, setSavedFingerprint] = useState('')
+  const [pendingDestination, setPendingDestination] = useState<string>()
+  const [destinationAfterFirstSave, setDestinationAfterFirstSave] = useState<string>()
+  const loadedRef = useRef(!playId)
+  const saveSequence = useRef(0)
   const landscape = useLandscape()
   const editor = useEditorState()
   const playback = useStepPlayback(editor.steps, () => {
@@ -62,6 +87,136 @@ export function EditorPage() {
   const drawingMode = editor.mode === 'select' || editor.mode === 'delete' ? undefined : editor.mode
   const placementLabel = iconTools.find((tool) => tool.kind === placementKind)?.label
   const displayedIcons = playback.icons ?? editor.icons
+  const saveableState: SaveableEditorState = {
+    steps: editor.steps,
+    drawings: editor.drawings,
+    courtView: view,
+    loopPlayback: playback.loop,
+  }
+  const hasUnsavedChanges = savedFingerprint
+    ? hasUnsavedEditorChanges(savedFingerprint, saveableState)
+    : false
+
+  useEffect(() => {
+    if (!playId && !savedFingerprint) setSavedFingerprint(createEditorFingerprint(saveableState))
+    // 新規作成時の最初の状態だけを保存基準にする。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!playId) return
+    let active = true
+    loadPlayDocument(playId).then((document) => {
+      if (!active) return
+      if (!document) {
+        navigate('/', { replace: true })
+        return
+      }
+      editor.loadDocument(document.steps, document.drawings)
+      setPlayName(document.play.name)
+      setPlayType(document.play.type)
+      setTagsText(document.play.tags.join(', '))
+      setView(document.play.courtView)
+      playback.setLoop(document.play.loopPlayback)
+      setSavedPlayId(document.play.id)
+      setSavedFingerprint(createEditorFingerprint({
+        steps: document.steps,
+        drawings: document.drawings,
+        courtView: document.play.courtView,
+        loopPlayback: document.play.loopPlayback,
+      }))
+      setSaveState('saved')
+      loadedRef.current = true
+    }).catch(() => {
+      if (active) setSaveState('error')
+    })
+    return () => { active = false }
+    // 読み込みはURLの作戦IDが変わったときだけ行う。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playId])
+
+  const saveCurrent = useCallback(async (id = savedPlayId) => {
+    if (!playName.trim()) return undefined
+    const stateAtSave: SaveableEditorState = {
+      steps: editor.steps,
+      drawings: editor.drawings,
+      courtView: view,
+      loopPlayback: playback.loop,
+    }
+    const sequence = ++saveSequence.current
+    setSaveState('saving')
+    try {
+      const nextId = await savePlayDocument({
+        id,
+        name: playName,
+        type: playType,
+        tags: tagsText.split(/[,、]/),
+        courtView: view,
+        loopPlayback: playback.loop,
+        steps: editor.steps,
+        drawings: editor.drawings,
+      })
+      if (sequence === saveSequence.current) {
+        setSavedFingerprint(createEditorFingerprint(stateAtSave))
+        setSaveState('saved')
+      }
+      return nextId
+    } catch {
+      if (sequence === saveSequence.current) setSaveState('error')
+      return undefined
+    }
+  }, [editor.drawings, editor.steps, playName, playType, playback.loop, savedPlayId, tagsText, view])
+
+  const createFirstSave = async () => {
+    if (!playName.trim()) return
+    const id = await saveCurrent(savedPlayId ?? undefined)
+    if (!id) return
+    setSavedPlayId(id)
+    setShowSaveDialog(false)
+    loadedRef.current = true
+    if (destinationAfterFirstSave) {
+      const destination = destinationAfterFirstSave
+      setDestinationAfterFirstSave(undefined)
+      navigate(destination)
+    } else if (!playId) {
+      navigate(`/editor/${id}`, { replace: true })
+    }
+  }
+
+  const requestLeave = useCallback((destination: string) => {
+    if (!requiresLeaveConfirmation(hasUnsavedChanges, location.pathname, destination)) return false
+    setPendingDestination(destination)
+    return true
+  }, [hasUnsavedChanges, location.pathname])
+
+  useEffect(() => registerLeaveRequestHandler(requestLeave), [registerLeaveRequestHandler, requestLeave])
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
+  const returnToList = () => {
+    if (!requestLeave('/')) navigate('/')
+  }
+
+  const saveAndLeave = async () => {
+    const destination = pendingDestination
+    if (!destination) return
+    setPendingDestination(undefined)
+    if (!savedPlayId) {
+      setDestinationAfterFirstSave(destination)
+      setShowSaveDialog(true)
+      return
+    }
+    const id = await saveCurrent()
+    if (id) navigate(destination)
+  }
 
   const resetStepInteraction = (operation: StepOperation) => {
     const reset = resetForStepOperation(operation)
@@ -191,10 +346,17 @@ export function EditorPage() {
   return (
     <div className="editor-page">
       <header className="editor-heading">
-        <div><p className="section-label">EDITOR</p><h1>作戦盤</h1></div>
+        <div><p className="section-label">EDITOR</p><h1>{playName || '作戦盤'}</h1></div>
         <div className="editor-status" aria-live="polite">
           <span>{editor.icons.length} アイコン</span>
           <span>{editor.drawings.length} ライン</span>
+          <span>{saveState === 'loading' ? '読込中…' : saveState === 'saving' ? '保存中…' : saveState === 'error' ? '保存失敗' : hasUnsavedChanges || !savedPlayId ? '未保存' : '保存済み'}</span>
+        </div>
+        <div className="editor-save-actions">
+          <button type="button" onClick={returnToList}>← 一覧へ</button>
+          <button type="button" className={`primary-button${hasUnsavedChanges ? ' unsaved' : ''}`} onClick={() => savedPlayId ? void saveCurrent() : setShowSaveDialog(true)}>
+            {savedPlayId ? hasUnsavedChanges ? '● 保存' : '保存' : '名前を付けて保存'}
+          </button>
         </div>
       </header>
 
@@ -237,6 +399,12 @@ export function EditorPage() {
         >
           削除
         </button>
+        <div className="landscape-save-actions">
+          <button type="button" onClick={returnToList}>← 一覧</button>
+          <button type="button" className={hasUnsavedChanges ? 'unsaved' : ''} onClick={() => savedPlayId ? void saveCurrent() : setShowSaveDialog(true)}>
+            {hasUnsavedChanges ? '● 保存' : '保存'}
+          </button>
+        </div>
       </section>
 
       <section className="board-card editor-board" aria-label={`${miniBasketballCourt.name} ${miniBasketballCourt.viewLabels[view]}表示`}>
@@ -425,6 +593,47 @@ export function EditorPage() {
             <div>
               <button type="button" onClick={() => setShowStepDeleteConfirmation(false)}>キャンセル</button>
               <button type="button" className="confirm-delete" onClick={removeCurrentStep}>削除する</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showSaveDialog && (
+        <div className="confirm-backdrop" role="presentation">
+          <section className="clear-confirm save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-dialog-title">
+            <h2 id="save-dialog-title">作戦を保存</h2>
+            <label>名前<input value={playName} onChange={(event) => setPlayName(event.target.value)} /></label>
+            <label>種別
+              <select value={playType} onChange={(event) => setPlayType(event.target.value as PlayType)}>
+                <option value="play">作戦</option>
+                <option value="drill">練習ドリル</option>
+              </select>
+            </label>
+            <label>タグ（カンマ区切り）<input value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="例：オフェンス, 低学年" /></label>
+            <div>
+              <button type="button" onClick={() => {
+                setShowSaveDialog(false)
+                setDestinationAfterFirstSave(undefined)
+              }}>キャンセル</button>
+              <button type="button" className="confirm-save" disabled={!playName.trim() || saveState === 'saving'} onClick={() => void createFirstSave()}>保存する</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {pendingDestination && (
+        <div className="confirm-backdrop" role="presentation">
+          <section className="clear-confirm leave-confirm" role="dialog" aria-modal="true" aria-labelledby="leave-confirm-title">
+            <h2 id="leave-confirm-title">変更が保存されていません</h2>
+            <p>移動する前に、この作戦の変更を保存しますか？</p>
+            <div>
+              <button type="button" onClick={() => setPendingDestination(undefined)}>キャンセル</button>
+              <button type="button" className="discard-button" onClick={() => {
+                const destination = pendingDestination
+                setPendingDestination(undefined)
+                navigate(destination)
+              }}>保存しない</button>
+              <button type="button" className="confirm-save" onClick={() => void saveAndLeave()}>保存する</button>
             </div>
           </section>
         </div>

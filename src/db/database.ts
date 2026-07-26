@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { CourtConfig, Point } from '../court/court-config'
 
-export const DATA_SCHEMA_VERSION = 1
+export const DATA_SCHEMA_VERSION = 2
 
 export type StoredRecord = {
   id: string
@@ -36,6 +36,7 @@ export type Play = StoredRecord & {
   type: PlayType
   tags: string[]
   courtConfigId: string
+  courtView: 'half' | 'full'
   rosterId?: string
   loopPlayback: boolean
 }
@@ -48,6 +49,7 @@ export type IconSnapshot = {
   position: Point
   playerId?: string
   label?: string
+  holderId?: string
 }
 
 export type IconMotionControlPoints = {
@@ -114,6 +116,27 @@ export class UgoBoardDatabase extends Dexie {
       plays: 'id, type, courtConfigId, rosterId, updatedAt, *tags',
       steps: 'id, playId, [playId+order], updatedAt',
       drawings: 'id, playId, stepId, type, updatedAt',
+    })
+
+    this.version(3).stores({
+      settings: 'id, updatedAt',
+      courtConfigs: 'id, name, updatedAt',
+      rosters: 'id, teamName, updatedAt',
+      players: 'id, rosterId, jerseyNumber, updatedAt',
+      plays: 'id, type, courtConfigId, rosterId, updatedAt, *tags',
+      steps: 'id, playId, [playId+order], updatedAt',
+      drawings: 'id, playId, stepId, type, updatedAt',
+    }).upgrade(async (transaction) => {
+      await transaction.table<Play, string>('plays').toCollection().modify((play) => {
+        play.courtView ??= 'half'
+        play.schemaVersion = DATA_SCHEMA_VERSION
+      })
+      await transaction.table<Step, string>('steps').toCollection().modify((step) => {
+        step.schemaVersion = DATA_SCHEMA_VERSION
+      })
+      await transaction.table<Drawing, string>('drawings').toCollection().modify((drawing) => {
+        drawing.schemaVersion = DATA_SCHEMA_VERSION
+      })
     })
   }
 }
