@@ -21,12 +21,14 @@ const sample = {
   tags: ['オフェンス', 'パス'],
   courtView: 'full' as const,
   loopPlayback: true,
+  rosterId: 'roster-1',
+  includePhotosInShare: false,
   steps: [
     {
       id: 'step-1',
       order: 1,
       icons: [
-        { id: 'player-1', kind: 'offense' as const, label: 'O', position: { x: 0.2, y: 0.3 } },
+        { id: 'player-1', kind: 'offense' as const, label: 'O', position: { x: 0.2, y: 0.3 }, playerId: 'member-7' },
         { id: 'ball-1', kind: 'ball' as const, label: '', position: { x: 0.2, y: 0.3 }, holderId: 'player-1' },
       ],
       holderId: 'player-1',
@@ -35,7 +37,7 @@ const sample = {
       id: 'step-2',
       order: 2,
       icons: [
-        { id: 'player-1', kind: 'offense' as const, label: 'O', position: { x: 0.7, y: 0.4 } },
+        { id: 'player-1', kind: 'offense' as const, label: 'O', position: { x: 0.7, y: 0.4 }, playerId: 'member-7' },
         { id: 'ball-1', kind: 'ball' as const, label: '', position: { x: 0.7, y: 0.4 }, holderId: 'player-1' },
       ],
       holderId: 'player-1',
@@ -56,6 +58,8 @@ describe('作戦の保存と読込', () => {
       tags: sample.tags,
       courtView: 'full',
       loopPlayback: true,
+      rosterId: 'roster-1',
+      includePhotosInShare: false,
     })
     expect(loaded?.steps).toEqual(sample.steps)
     expect(loaded?.drawings).toEqual(sample.drawings)

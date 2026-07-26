@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { CourtConfig, Point } from '../court/court-config'
 
-export const DATA_SCHEMA_VERSION = 2
+export const DATA_SCHEMA_VERSION = 3
 
 export type StoredRecord = {
   id: string
@@ -26,7 +26,6 @@ export type Player = StoredRecord & {
   displayName: string
   jerseyNumber: string
   photo?: Blob
-  includePhotoInShare: boolean
 }
 
 export type PlayType = 'play' | 'drill'
@@ -39,6 +38,7 @@ export type Play = StoredRecord & {
   courtView: 'half' | 'full'
   rosterId?: string
   loopPlayback: boolean
+  includePhotosInShare: boolean
 }
 
 export type IconKind = 'offense' | 'defense' | 'ball' | 'cone' | 'chair'
@@ -136,6 +136,27 @@ export class UgoBoardDatabase extends Dexie {
       })
       await transaction.table<Drawing, string>('drawings').toCollection().modify((drawing) => {
         drawing.schemaVersion = DATA_SCHEMA_VERSION
+      })
+    })
+
+    this.version(4).stores({
+      settings: 'id, updatedAt',
+      courtConfigs: 'id, name, updatedAt',
+      rosters: 'id, teamName, updatedAt',
+      players: 'id, rosterId, jerseyNumber, updatedAt',
+      plays: 'id, type, courtConfigId, rosterId, updatedAt, *tags',
+      steps: 'id, playId, [playId+order], updatedAt',
+      drawings: 'id, playId, stepId, type, updatedAt',
+    }).upgrade(async (transaction) => {
+      await transaction.table<Play, string>('plays').toCollection().modify((play) => {
+        play.includePhotosInShare = false
+        play.schemaVersion = DATA_SCHEMA_VERSION
+      })
+      await transaction.table<Roster, string>('rosters').toCollection().modify((roster) => {
+        roster.schemaVersion = DATA_SCHEMA_VERSION
+      })
+      await transaction.table<Player, string>('players').toCollection().modify((player) => {
+        player.schemaVersion = DATA_SCHEMA_VERSION
       })
     })
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canDragIcon,
   canInteractWithIcons,
+  canOpenAssignment,
   chooseDrawing,
   choosePlacement,
   closeDrawingPalette,
@@ -38,9 +39,11 @@ describe('配置・描画モード切替', () => {
     expect(canDragIcon(closed.editorMode, closed.placementKind)).toBe(true)
   })
 
-  it('描画・削除・配置中はドラッグできない', () => {
+  it('通常モードではドラッグでき、描画・削除・割り当て・配置中はドラッグできない', () => {
+    expect(canDragIcon('select')).toBe(true)
     expect(canDragIcon('arrow')).toBe(false)
     expect(canDragIcon('delete')).toBe(false)
+    expect(canDragIcon('assign')).toBe(false)
     expect(canDragIcon('select', 'offense')).toBe(false)
   })
 
@@ -49,6 +52,14 @@ describe('配置・描画モード切替', () => {
     expect(canInteractWithIcons('dribble')).toBe(false)
     expect(canInteractWithIcons('select')).toBe(true)
     expect(canInteractWithIcons('delete')).toBe(true)
+    expect(canInteractWithIcons('assign')).toBe(true)
+  })
+
+  it('割り当てモードのときだけ割り当てUIを開ける', () => {
+    expect(canOpenAssignment('assign')).toBe(true)
+    expect(canOpenAssignment('select')).toBe(false)
+    expect(canOpenAssignment('freehand')).toBe(false)
+    expect(canOpenAssignment('delete')).toBe(false)
   })
 
   it('配置完了・自動終了後は配置パレットを開く', () => {
@@ -73,6 +84,7 @@ describe('配置・描画モード切替', () => {
         openPalette: undefined,
       })
       expect(canDragIcon(reset.editorMode, reset.placementKind)).toBe(true)
+      expect(canOpenAssignment(reset.editorMode)).toBe(false)
     },
   )
 })

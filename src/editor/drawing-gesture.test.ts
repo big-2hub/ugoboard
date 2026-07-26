@@ -41,4 +41,13 @@ describe('スマホのタッチ描画入力', () => {
       4,
     )).toBeUndefined()
   })
+
+  it('割り当てモードでは新規描画を開始しない', () => {
+    expect(startDrawingGesture(
+      { inputType: 'touch', point: { x: 0.4, y: 0.4 } },
+      'assign',
+      '#ef4444',
+      4,
+    )).toBeUndefined()
+  })
 })

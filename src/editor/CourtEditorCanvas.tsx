@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Konva from 'konva'
-import { Arrow, Circle, Group, Layer, Line, Rect, RegularPolygon, Stage, Text } from 'react-konva'
+import { Arrow, Circle, Group, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Stage, Text } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { CourtConfig, CourtLine, Point } from '../court/court-config'
 import type { IconKind } from '../db/database'
@@ -28,6 +28,7 @@ import { groupIconsByRenderOrder } from './icon-layer-order'
 import { canDragIcon, canInteractWithIcons, resetTransientIconState } from './editor-tool-mode'
 import { placementOnIcon } from './icon-placement'
 import { syncIconVisualFeedback } from './icon-visual-feedback'
+import { getPlayerIconText } from './player-icon-display'
 
 type Props = {
   config: CourtConfig
@@ -87,6 +88,23 @@ function DrawingShape({ drawing, frame, renderScale, opacity = 1, onDelete }: { 
   )
 }
 
+function PlayerPhotoShape({ url, radius }: { url: string; radius: number }) {
+  const [image, setImage] = useState<HTMLImageElement>()
+  useEffect(() => {
+    const next = new Image()
+    next.onload = () => setImage(next)
+    next.src = url
+    return () => setImage(undefined)
+  }, [url])
+  return (
+    <Group clipFunc={(context) => {
+      context.arc(0, 0, radius, 0, Math.PI * 2)
+    }}>
+      {image && <KonvaImage image={image} x={-radius} y={-radius} width={radius * 2} height={radius * 2} />}
+    </Group>
+  )
+}
+
 function IconShape({ icon, renderScale }: { icon: EditorIcon; renderScale: number }) {
   if (icon.kind === 'ball') {
     const radius = getBallDisplayRadius(icon) * renderScale
@@ -100,11 +118,23 @@ function IconShape({ icon, renderScale }: { icon: EditorIcon; renderScale: numbe
     return <Group><Circle radius={22} opacity={0} /><Rect x={-14 * renderScale} y={-13 * renderScale} width={28 * renderScale} height={22 * renderScale} cornerRadius={3 * renderScale} fill="#8b5e3c" stroke="#fff3dd" strokeWidth={Math.max(1.5, 2 * renderScale)} /><Line points={[-10, 9, -12, 17, 10, 9, 12, 17].map((value) => value * renderScale)} stroke="#fff3dd" strokeWidth={Math.max(1.5, 2 * renderScale)} /></Group>
   }
   const offense = icon.kind === 'offense'
+  const radius = 20 * renderScale
+  const text = getPlayerIconText(icon) || (offense ? 'O' : 'D')
+  const hasPhoto = Boolean(icon.photoUrl)
+  const fontSize = Math.max(9, (text.length > 3 ? 10 : text.length > 2 ? 12 : text.length > 1 ? 14 : 18) * renderScale)
   return (
     <Group>
       <Circle radius={22} opacity={0} />
-      <Circle radius={20 * renderScale} fill={offense ? '#f8f5ed' : '#173d2b'} stroke={offense ? '#173d2b' : '#f8f5ed'} strokeWidth={Math.max(1.5, 3 * renderScale)} />
-      <Text text={icon.label || (offense ? 'O' : 'D')} x={-14 * renderScale} y={-10 * renderScale} width={28 * renderScale} align="center" fontSize={18 * renderScale} fontStyle="bold" fill={offense ? '#173d2b' : '#f8f5ed'} />
+      <Circle radius={radius} fill={offense ? '#f8f5ed' : '#173d2b'} stroke={offense ? '#173d2b' : '#f8f5ed'} strokeWidth={Math.max(1.5, 3 * renderScale)} />
+      {hasPhoto && icon.photoUrl
+        ? <PlayerPhotoShape url={icon.photoUrl} radius={radius - Math.max(2, 3 * renderScale)} />
+        : <Text text={text} x={-18 * renderScale} y={-fontSize * 0.55} width={36 * renderScale} align="center" wrap="none" fontSize={fontSize} fontStyle="bold" fill={offense ? '#173d2b' : '#f8f5ed'} />}
+      {hasPhoto && icon.jerseyNumber && (
+        <Group x={13 * renderScale} y={13 * renderScale}>
+          <Circle radius={8 * renderScale} fill="#ffde59" stroke="#173d2b" strokeWidth={Math.max(1, renderScale)} />
+          <Text text={icon.jerseyNumber} x={-8 * renderScale} y={-5 * renderScale} width={16 * renderScale} align="center" fontSize={9 * renderScale} fontStyle="bold" fill="#173d2b" />
+        </Group>
+      )}
     </Group>
   )
 }
@@ -178,6 +208,10 @@ export function CourtEditorCanvas(props: Props) {
 
   const handlePointerDown = (event: KonvaEventObject<PointerEvent | TouchEvent>) => {
     if (mode === 'delete') return
+    if (mode === 'assign') {
+      if (event.target === event.target.getStage()) onSelectIcon(undefined)
+      return
+    }
     if (mode === 'select') {
       if (event.target === event.target.getStage()) {
         const input = readPointer(event)

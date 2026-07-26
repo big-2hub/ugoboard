@@ -11,13 +11,13 @@ afterEach(async () => {
   databases.length = 0
 })
 
-describe('UgoBoardDatabase version 3', () => {
+describe('UgoBoardDatabase version 4', () => {
   it('version 1を保ったまま必要な全テーブルを作る', async () => {
     const database = new UgoBoardDatabase(`ugoboard-test-${crypto.randomUUID()}`)
     databases.push(database)
     await database.open()
 
-    expect(database.verno).toBe(3)
+    expect(database.verno).toBe(4)
     expect(database.tables.map((table) => table.name).sort()).toEqual([
       'courtConfigs', 'drawings', 'players', 'plays', 'rosters', 'settings', 'steps',
     ])
@@ -35,6 +35,7 @@ describe('UgoBoardDatabase version 3', () => {
       courtConfigId: 'jba-u12-28x15',
       courtView: 'half',
       loopPlayback: true,
+      includePhotosInShare: false,
     }
     const step: Step = {
       ...record,

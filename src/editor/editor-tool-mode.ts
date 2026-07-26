@@ -26,7 +26,11 @@ export function canDragIcon(editorMode: EditorMode, placementKind?: IconKind) {
 }
 
 export function canInteractWithIcons(editorMode: EditorMode) {
-  return editorMode === 'select' || editorMode === 'delete'
+  return editorMode === 'select' || editorMode === 'delete' || editorMode === 'assign'
+}
+
+export function canOpenAssignment(editorMode: EditorMode) {
+  return editorMode === 'assign'
 }
 
 export function finishPlacementFlow(): EditorToolMode & { openPlacementPalette: true } {

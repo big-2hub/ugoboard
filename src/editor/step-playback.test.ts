@@ -57,6 +57,19 @@ describe('ステップ間の直線補間', () => {
       .toEqual(halfway.find((icon) => icon.id === 'p1')?.position)
   })
 
+  it('再生補間中も選手割り当てIDを保持する', () => {
+    const from: EditorIcon[] = [
+      { id: 'p1', kind: 'offense', playerId: 'member-7', position: { x: 0.2, y: 0.3 } },
+    ]
+    const to: EditorIcon[] = [
+      { id: 'p1', kind: 'offense', playerId: 'member-7', position: { x: 0.6, y: 0.7 } },
+    ]
+    expect(interpolateStepIcons(from, to, 0.5)[0]).toMatchObject({
+      playerId: 'member-7',
+      position: { x: 0.4, y: 0.5 },
+    })
+  })
+
   it('再生中は編集できず、終了後は編集できる', () => {
     expect(canEditDuringPlayback(true)).toBe(false)
     expect(canEditDuringPlayback(false)).toBe(true)

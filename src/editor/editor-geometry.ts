@@ -21,6 +21,11 @@ export type EditorIcon = {
   position: Point
   label?: string
   holderId?: string
+  playerId?: string
+  displayName?: string
+  jerseyNumber?: string
+  photoUrl?: string
+  defaultNumber?: number
 }
 
 export function getIconVisualFeedback(icon: EditorIcon, active: boolean) {

@@ -30,6 +30,18 @@ describe('手動保存の未保存判定', () => {
     expect(hasUnsavedEditorChanges(saved, { ...initial, loopPlayback: true })).toBe(true)
     expect(hasUnsavedEditorChanges(saved, { ...initial, courtView: 'full' })).toBe(true)
   })
+
+  it('使用ロスターと選手割り当ての変更も未保存として扱う', () => {
+    const saved = createEditorFingerprint(initial)
+    expect(hasUnsavedEditorChanges(saved, { ...initial, rosterId: 'roster-1' })).toBe(true)
+    expect(hasUnsavedEditorChanges(saved, {
+      ...initial,
+      steps: [{
+        ...initial.steps[0],
+        icons: [{ id: 'offense-1', kind: 'offense', position: { x: 0.5, y: 0.25 }, playerId: 'player-1' }],
+      }],
+    })).toBe(true)
+  })
 })
 
 describe('画面遷移の確認判定', () => {

@@ -20,3 +20,7 @@ export function canPlaceIcon(icons: EditorIcon[], kind: IconKind) {
 export function reachesPlacementLimitAfterAdd(icons: EditorIcon[], kind: IconKind) {
   return countIconsOfKind(icons, kind) + 1 >= ICON_PLACEMENT_LIMITS[kind]
 }
+
+export function shouldShowPlacementLimitMessage(icons: EditorIcon[], kind: IconKind) {
+  return !canPlaceIcon(icons, kind)
+}

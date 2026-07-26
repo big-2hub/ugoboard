@@ -1,23 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { miniBasketballCourt, type Point } from '../court/court-config'
-import type { DrawingType, IconKind } from '../db/database'
+import type { DrawingType, IconKind, Player, PlayType, Roster } from '../db/database'
 import { CourtEditorCanvas } from '../editor/CourtEditorCanvas'
 import {
   chooseDrawing,
   choosePlacement,
+  canOpenAssignment,
   closeDrawingPalette,
   finishPlacementFlow,
   resetForStepOperation,
   type StepOperation,
 } from '../editor/editor-tool-mode'
 import { drawingModes, useEditorState } from '../editor/use-editor-state'
-import { canPlaceIcon, countIconsOfKind, ICON_PLACEMENT_LIMITS, reachesPlacementLimitAfterAdd } from '../editor/icon-placement-limits'
+import {
+  canPlaceIcon,
+  countIconsOfKind,
+  ICON_PLACEMENT_LIMITS,
+  reachesPlacementLimitAfterAdd,
+  shouldShowPlacementLimitMessage,
+} from '../editor/icon-placement-limits'
 import { decideBallPlacement, shouldEndPlacementAfterAdd } from '../editor/icon-placement'
 import { useStepPlayback } from '../editor/use-step-playback'
 import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../editor/step-playback'
 import { loadPlayDocument, savePlayDocument } from '../db/play-repository'
-import type { PlayType } from '../db/database'
 import {
   createEditorFingerprint,
   hasUnsavedEditorChanges,
@@ -25,6 +31,8 @@ import {
   type SaveableEditorState,
 } from '../editor/editor-save-state'
 import { useUnsavedNavigation } from '../navigation/unsaved-navigation'
+import { listRosterPlayers, listRosters } from '../db/roster-repository'
+import { decoratePlayerIcons } from '../editor/player-icon-display'
 
 type OpenPalette = 'placement' | 'drawing' | 'menu'
 
@@ -76,6 +84,10 @@ export function EditorPage() {
   const [savedFingerprint, setSavedFingerprint] = useState('')
   const [pendingDestination, setPendingDestination] = useState<string>()
   const [destinationAfterFirstSave, setDestinationAfterFirstSave] = useState<string>()
+  const [rosterId, setRosterId] = useState<string>()
+  const [rosters, setRosters] = useState<Roster[]>([])
+  const [rosterPlayers, setRosterPlayers] = useState<Player[]>([])
+  const [playerPhotoUrls, setPlayerPhotoUrls] = useState<Map<string, string>>(new Map())
   const loadedRef = useRef(!playId)
   const saveSequence = useRef(0)
   const landscape = useLandscape()
@@ -84,18 +96,52 @@ export function EditorPage() {
     const lastStep = editor.steps.at(-1)
     if (lastStep) editor.selectStep(lastStep.id)
   })
-  const drawingMode = editor.mode === 'select' || editor.mode === 'delete' ? undefined : editor.mode
+  const drawingMode = drawingModes.some((tool) => tool.type === editor.mode)
+    ? editor.mode as DrawingType
+    : undefined
   const placementLabel = iconTools.find((tool) => tool.kind === placementKind)?.label
-  const displayedIcons = playback.icons ?? editor.icons
+  const sourceIcons = playback.icons ?? editor.icons
+  const displayedIcons = useMemo(
+    () => decoratePlayerIcons(sourceIcons, rosterPlayers, playerPhotoUrls),
+    [playerPhotoUrls, rosterPlayers, sourceIcons],
+  )
+  const selectedPlayerIcon = editor.icons.find((icon) =>
+    icon.id === editor.selectedIconId && (icon.kind === 'offense' || icon.kind === 'defense'))
   const saveableState: SaveableEditorState = {
     steps: editor.steps,
     drawings: editor.drawings,
     courtView: view,
     loopPlayback: playback.loop,
+    rosterId,
   }
   const hasUnsavedChanges = savedFingerprint
     ? hasUnsavedEditorChanges(savedFingerprint, saveableState)
     : false
+
+  useEffect(() => {
+    listRosters().then(setRosters)
+  }, [])
+
+  useEffect(() => {
+    if (!rosterId) {
+      setRosterPlayers([])
+      return
+    }
+    let active = true
+    listRosterPlayers(rosterId).then((players) => {
+      if (active) setRosterPlayers(players)
+    })
+    return () => { active = false }
+  }, [rosterId])
+
+  useEffect(() => {
+    const urls = new Map<string, string>()
+    rosterPlayers.forEach((player) => {
+      if (player.photo) urls.set(player.id, URL.createObjectURL(player.photo))
+    })
+    setPlayerPhotoUrls(urls)
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [rosterPlayers])
 
   useEffect(() => {
     if (!playId && !savedFingerprint) setSavedFingerprint(createEditorFingerprint(saveableState))
@@ -117,6 +163,7 @@ export function EditorPage() {
       setPlayType(document.play.type)
       setTagsText(document.play.tags.join(', '))
       setView(document.play.courtView)
+      setRosterId(document.play.rosterId)
       playback.setLoop(document.play.loopPlayback)
       setSavedPlayId(document.play.id)
       setSavedFingerprint(createEditorFingerprint({
@@ -124,6 +171,7 @@ export function EditorPage() {
         drawings: document.drawings,
         courtView: document.play.courtView,
         loopPlayback: document.play.loopPlayback,
+        rosterId: document.play.rosterId,
       }))
       setSaveState('saved')
       loadedRef.current = true
@@ -142,6 +190,7 @@ export function EditorPage() {
       drawings: editor.drawings,
       courtView: view,
       loopPlayback: playback.loop,
+      rosterId,
     }
     const sequence = ++saveSequence.current
     setSaveState('saving')
@@ -153,6 +202,8 @@ export function EditorPage() {
         tags: tagsText.split(/[,、]/),
         courtView: view,
         loopPlayback: playback.loop,
+        rosterId,
+        includePhotosInShare: false,
         steps: editor.steps,
         drawings: editor.drawings,
       })
@@ -165,7 +216,7 @@ export function EditorPage() {
       if (sequence === saveSequence.current) setSaveState('error')
       return undefined
     }
-  }, [editor.drawings, editor.steps, playName, playType, playback.loop, savedPlayId, tagsText, view])
+  }, [editor.drawings, editor.steps, playName, playType, playback.loop, rosterId, savedPlayId, tagsText, view])
 
   const createFirstSave = async () => {
     if (!playName.trim()) return
@@ -276,7 +327,7 @@ export function EditorPage() {
 
   const openDrawing = () => {
     setPlacementKind(undefined)
-    if (editor.mode === 'delete') editor.setMode('select')
+    if (editor.mode === 'delete' || editor.mode === 'assign') editor.setMode('select')
     editor.setSelectedIconId(undefined)
     setOpenPalette(openPalette === 'drawing' ? undefined : 'drawing')
   }
@@ -310,7 +361,6 @@ export function EditorPage() {
     if (reachesPlacementLimitAfterAdd(editor.icons, kind)) {
       setPlacementKind(undefined)
       editor.setMode('select')
-      showLimitToast(kind)
       setOpenPalette('placement')
     }
   }
@@ -320,6 +370,13 @@ export function EditorPage() {
     setOpenPalette(undefined)
     editor.setSelectedIconId(undefined)
     editor.setMode(editor.mode === 'delete' ? 'select' : 'delete')
+  }
+
+  const toggleAssignmentMode = () => {
+    setPlacementKind(undefined)
+    setOpenPalette(undefined)
+    editor.setSelectedIconId(undefined)
+    editor.setMode(editor.mode === 'assign' ? 'select' : 'assign')
   }
 
   const closeDetailPalette = () => {
@@ -335,6 +392,12 @@ export function EditorPage() {
       editor.setSelectedIconId(undefined)
     }
     setOpenPalette(undefined)
+  }
+
+  const changeRoster = (nextRosterId?: string) => {
+    if (nextRosterId === rosterId) return
+    editor.clearPlayerAssignments()
+    setRosterId(nextRosterId)
   }
 
   useEffect(() => {
@@ -488,7 +551,7 @@ export function EditorPage() {
                 (() => {
                   const count = countIconsOfKind(editor.icons, tool.kind)
                   const limit = ICON_PLACEMENT_LIMITS[tool.kind]
-                  const atLimit = count >= limit
+                  const atLimit = shouldShowPlacementLimitMessage(editor.icons, tool.kind)
                   return (
                 <button
                   key={tool.kind}
@@ -496,8 +559,12 @@ export function EditorPage() {
                   className={placementKind === tool.kind ? 'active' : ''}
                   aria-pressed={placementKind === tool.kind}
                   aria-label={`${tool.label}を連続配置（${count}/${limit}）`}
-                  disabled={atLimit}
+                  data-limit-reached={atLimit || undefined}
                   onClick={() => {
+                    if (atLimit) {
+                      showLimitToast(tool.kind)
+                      return
+                    }
                     const nextMode = choosePlacement(tool.kind)
                     setPlacementKind(nextMode.placementKind)
                     editor.setMode(nextMode.editorMode)
@@ -547,6 +614,12 @@ export function EditorPage() {
 
           {openPalette === 'menu' && (
             <div className="menu-actions">
+              <label className="roster-choice">使用するチーム
+                <select value={rosterId ?? ''} onChange={(event) => changeRoster(event.target.value || undefined)}>
+                  <option value="">ロスターなし</option>
+                  {rosters.map((roster) => <option key={roster.id} value={roster.id}>{roster.teamName}</option>)}
+                </select>
+              </label>
               <div className="view-toggle" role="group" aria-label="コート表示">
                 <button type="button" className={view === 'half' ? 'active' : ''} aria-pressed={view === 'half'} onClick={() => setView('half')}>{miniBasketballCourt.viewLabels.half}</button>
                 <button type="button" className={view === 'full' ? 'active' : ''} aria-pressed={view === 'full'} onClick={() => setView('full')}>{miniBasketballCourt.viewLabels.full}</button>
@@ -558,12 +631,62 @@ export function EditorPage() {
         </aside>
       )}
 
+      {!playback.isPlaying && !openPalette && canOpenAssignment(editor.mode) && selectedPlayerIcon && (
+        <aside className="detail-palette assignment-palette" aria-label="選手をアイコンへ割り当て">
+          <div className="palette-heading">
+            <strong>選手を割り当て</strong>
+            <button type="button" onClick={() => {
+              editor.setSelectedIconId(undefined)
+              editor.setMode('select')
+            }}>閉じる</button>
+          </div>
+          <label className="roster-choice">チーム
+            <select value={rosterId ?? ''} onChange={(event) => changeRoster(event.target.value || undefined)}>
+              <option value="">チームを選択</option>
+              {rosters.map((roster) => <option key={roster.id} value={roster.id}>{roster.teamName}</option>)}
+            </select>
+          </label>
+          {!rosterId && <p>「選手」タブでチームを作成し、ここで選択してください。</p>}
+          {rosterId && rosterPlayers.length === 0 && <p>このチームには選手が登録されていません。</p>}
+          {rosterPlayers.length > 0 && (
+            <div className="assignment-grid">
+              {rosterPlayers.map((player) => (
+                <button
+                  key={player.id}
+                  type="button"
+                  className={selectedPlayerIcon.playerId === player.id ? 'active' : ''}
+                  aria-pressed={selectedPlayerIcon.playerId === player.id}
+                  onClick={() => {
+                    editor.assignPlayer(selectedPlayerIcon.id, player.id)
+                    editor.setSelectedIconId(undefined)
+                  }}
+                >
+                  {playerPhotoUrls.get(player.id)
+                    ? <img src={playerPhotoUrls.get(player.id)} alt="" />
+                    : <span className="assignment-avatar" aria-hidden="true">{player.displayName || player.jerseyNumber}</span>}
+                  <span>{player.displayName || '名前なし'}<small>{player.jerseyNumber ? `#${player.jerseyNumber}` : '番号なし'}</small></span>
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedPlayerIcon.playerId && (
+            <button type="button" className="unassign-button" onClick={() => {
+              editor.assignPlayer(selectedPlayerIcon.id, undefined)
+              editor.setSelectedIconId(undefined)
+            }}>割り当てを外す</button>
+          )}
+        </aside>
+      )}
+
       <nav className="editor-category-bar" aria-label="編集カテゴリ">
         <button type="button" disabled={playback.isPlaying} className={placementKind || openPalette === 'placement' ? 'active' : ''} aria-pressed={Boolean(placementKind || openPalette === 'placement')} onClick={openPlacement}>
           {placementKind ? `✓ ${placementLabel}完了` : '＋ 配置'}
         </button>
         <button type="button" disabled={playback.isPlaying} className={drawingMode || openPalette === 'drawing' ? 'active' : ''} aria-pressed={Boolean(drawingMode || openPalette === 'drawing')} onClick={openDrawing}>
           ✏ {drawingMode ? drawingLabels[drawingMode] : '描画'}
+        </button>
+        <button type="button" disabled={playback.isPlaying} className={editor.mode === 'assign' ? 'active assign-mode-button' : 'assign-mode-button'} aria-pressed={editor.mode === 'assign'} onClick={toggleAssignmentMode} aria-label="選手の割り当てモード">
+          👤 割当
         </button>
         <button type="button" disabled={playback.isPlaying} className={editor.mode === 'delete' ? 'active delete-mode-button' : 'delete-mode-button'} aria-pressed={editor.mode === 'delete'} onClick={toggleDeleteMode} aria-label="アイコンや描画を連続削除">⌫ 削除</button>
         <button type="button" disabled={playback.isPlaying || !editor.canUndo} onClick={editor.undo} aria-label="直前の操作を取り消す">↶ Undo</button>

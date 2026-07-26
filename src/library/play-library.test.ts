@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Play } from '../db/database'
 import { collectPlayTags, filterPlays } from './play-library'
 
-const base = { schemaVersion: 2, createdAt: '', updatedAt: '', courtConfigId: 'mini-basketball', courtView: 'half' as const, loopPlayback: false }
+const base = { schemaVersion: 3, createdAt: '', updatedAt: '', courtConfigId: 'mini-basketball', courtView: 'half' as const, loopPlayback: false, includePhotosInShare: false }
 const plays: Play[] = [
   { ...base, id: '1', name: '作戦A', type: 'play', tags: ['オフェンス'] },
   { ...base, id: '2', name: 'ドリルB', type: 'drill', tags: ['オフェンス', '低学年'] },

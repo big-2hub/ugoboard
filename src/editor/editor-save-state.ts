@@ -6,6 +6,7 @@ export type SaveableEditorState = {
   drawings: EditorDrawing[]
   courtView: 'half' | 'full'
   loopPlayback: boolean
+  rosterId?: string
 }
 
 export function createEditorFingerprint(state: SaveableEditorState): string {

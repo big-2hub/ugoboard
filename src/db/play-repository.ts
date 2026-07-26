@@ -19,6 +19,8 @@ export type PlayMetadata = {
   tags: string[]
   courtView: 'half' | 'full'
   loopPlayback: boolean
+  rosterId?: string
+  includePhotosInShare?: boolean
 }
 
 export type PlayDocument = {
@@ -42,6 +44,7 @@ function toStoredIcon(icon: EditorIcon): IconSnapshot {
     position: clonePoint(icon.position),
     label: icon.label,
     holderId: icon.holderId,
+    playerId: icon.playerId,
   }
 }
 
@@ -52,6 +55,7 @@ function toEditorIcon(icon: IconSnapshot): EditorIcon {
     position: clonePoint(icon.position),
     label: icon.label ?? '',
     holderId: icon.holderId,
+    playerId: icon.playerId,
   }
 }
 
@@ -76,6 +80,8 @@ export async function savePlayDocument(
     courtConfigId: 'jba-u12-28x15',
     courtView: input.courtView,
     loopPlayback: input.loopPlayback,
+    rosterId: input.rosterId,
+    includePhotosInShare: input.includePhotosInShare ?? false,
   }
   const steps: Step[] = input.steps.map((step) => ({
     ...record,
@@ -115,6 +121,7 @@ export async function loadPlayDocument(
 ): Promise<PlayDocument | undefined> {
   const play = await database.plays.get(id)
   if (!play) return undefined
+  play.includePhotosInShare ??= false
   const [steps, drawings] = await Promise.all([
     database.steps.where('playId').equals(id).sortBy('order'),
     database.drawings.where('playId').equals(id).toArray(),
@@ -169,6 +176,8 @@ export async function duplicatePlay(id: string, database: UgoBoardDatabase = db)
     tags: document.play.tags,
     courtView: document.play.courtView,
     loopPlayback: document.play.loopPlayback,
+    rosterId: document.play.rosterId,
+    includePhotosInShare: document.play.includePhotosInShare ?? false,
     steps: document.steps.map((step) => ({ ...step, id: stepIds.get(step.id)!, icons: step.icons.map((icon) => ({ ...icon, position: clonePoint(icon.position) })) })),
     drawings: document.drawings.map((drawing) => ({ ...drawing, id: createId('drawing'), points: drawing.points.map(clonePoint) })),
   }, database)

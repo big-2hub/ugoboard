@@ -90,6 +90,22 @@ export function useEditorState() {
     setDrawings(next.drawings)
   }, [drawings, icons, remember])
 
+  const assignPlayer = useCallback((iconId: string, playerId?: string) => {
+    setSteps((items) => items.map((step) => ({
+      ...step,
+      icons: step.icons.map((icon) => icon.id === iconId ? { ...icon, playerId } : icon),
+    })))
+    setHistory([])
+  }, [])
+
+  const clearPlayerAssignments = useCallback(() => {
+    setSteps((items) => items.map((step) => ({
+      ...step,
+      icons: step.icons.map((icon) => icon.playerId ? { ...icon, playerId: undefined } : icon),
+    })))
+    setHistory([])
+  }, [])
+
   const addDrawing = useCallback((drawing: Omit<EditorDrawing, 'id'>) => {
     remember()
     setDrawings((items) => [...items, { ...drawing, id: createId('drawing') }])
@@ -178,6 +194,8 @@ export function useEditorState() {
     deleteSelected,
     deleteIcon,
     deleteDrawing,
+    assignPlayer,
+    clearPlayerAssignments,
     addDrawing,
     undo,
     clearDrawings,
